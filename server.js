@@ -59,7 +59,7 @@ app.post('/api/login', (req, res) => {
   if (username === ADMIN_USER.username && password === ADMIN_USER.password) {
     res.cookie(AUTH_COOKIE_NAME, 'VALID_TOKEN_SECRET', {
       httpOnly: true,
-      secure: false,
+      secure: false, // Set to true if using HTTPS
       maxAge: 24 * 60 * 60 * 1000
     });
     res.status(200).json({ message: 'Login successful' });
@@ -81,12 +81,13 @@ app.post('/api/logout', (req, res) => {
 // === PUBLIC SEARCH (Ranked + Fuzzy) ===
 // ===================================
 
+// ***** THIS SECTION HAS BEEN UPDATED *****
 app.get('/api/inventory', (req, res) => {
   try {
     const raw = (req.query.search || '').toLowerCase().trim();
     if (!raw) return res.json([]);
 
-    // Normalize input: remove special chars
+    // Normalize input: remove special chars, keep letters/numbers/spaces
     const normalized = raw.replace(/[^\p{L}\p{N}\s]+/gu, ' ');
     const searchWords = normalized.split(/\s+/).filter(Boolean);
     if (searchWords.length === 0) return res.json([]);
@@ -102,23 +103,42 @@ app.get('/api/inventory', (req, res) => {
       }
 
       const scored = rows.map(r => {
+        // --- NEW UNICODE-SAFE LOGIC ---
+        
+        // 1. Get all parts of the category
+        // e.g., "Electronics > Mobile Phones" -> ['electronics', 'mobile phones']
         const parts = r.category.split('>').map(p => p.trim().toLowerCase());
-        const searchIn = parts.length > 2 ? parts.slice(2) : parts.slice(1);
-        const targetText = searchIn.join(' ');
+        const searchIn = parts; // Search all parts, not skipping any
+
+        // 2. Create a "bag of words" for exact matching (Unicode-safe)
+        // This splits "mobile phones" into "mobile", "phones"
+        // This is the FIX for Bangla.
+        const targetWords = searchIn.flatMap(part => 
+            part.replace(/[^\p{L}\p{N}\s]+/gu, ' ').split(/\s+/)
+        ).filter(Boolean);
+
+        // 3. Create the full text for partial/fuzzy matching
+        // e.g., "electronics mobile phones apple iphone 15"
+        const targetText = searchIn.join(' '); 
 
         let score = 0;
         let exactMatches = 0;
         let partialMatches = 0;
 
         searchWords.forEach(word => {
-          if (new RegExp(`\\b${word}\\b`, 'u').test(targetText)) {
+          // Exact match: check if our "bag of words" includes the search word
+          // This is Unicode-safe and replaces the broken \b regex
+          if (targetWords.includes(word)) {
             exactMatches++;
             score += 10; // exact match = 10 points
-          } else if (word.length >= 3 && targetText.includes(word)) {
+          } 
+          // Partial match: check if the full text string includes the search word
+          else if (word.length >= 3 && targetText.includes(word)) {
             partialMatches++;
             score += 1; // partial match = 1 point
           }
         });
+        // --- END OF NEW LOGIC ---
 
         // Add fuzzy score (0-5) using string-similarity
         const similarity = stringSimilarity.compareTwoStrings(raw, targetText);
@@ -132,14 +152,17 @@ app.get('/api/inventory', (req, res) => {
           similarity
         };
       })
-      .filter(c => c.score > 0)
+      .filter(c => c.score > 0) // Don't show anything that does not match
       .sort((a, b) => {
-        // first exact matches, then total score, then fuzzy similarity
+        // Sort by:
+        // 1. Most exact word matches (this is your primary requirement)
         if (a.exactMatches !== b.exactMatches) return b.exactMatches - a.exactMatches;
+        // 2. Total score (handles partial/fuzzy)
         if (a.score !== b.score) return b.score - a.score;
+        // 3. Raw similarity (tie-breaker)
         return b.similarity - a.similarity;
       })
-      .map(c => c.category);
+      .map(c => c.category); // Only return the category string
 
       res.json(scored);
       db.close();
@@ -149,6 +172,8 @@ app.get('/api/inventory', (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
+// ***** END OF UPDATED SECTION *****
+
 
 // ===================================
 // === ADMIN ROUTES ===
@@ -225,6 +250,8 @@ app.post('/api/inventory/upload', checkAuth, upload.single('csvFile'), (req, res
         db.run("BEGIN TRANSACTION");
         const stmt = db.prepare("INSERT INTO inventory (name, category) VALUES (?, ?)");
         results.forEach(item => {
+          // Note: The logic here seems to create 'Category > Name'
+          // e.g., "Mobiles > iPhone 15"
           const fullCategory = `${item.category} > ${item.name}`;
           stmt.run(item.name, fullCategory, function(err) {
             if (!err) addedCount++;
@@ -260,6 +287,6 @@ app.get('/inventory_admin.html', checkAuth, (req, res) => {
 
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Server running at http://0.0.0.0:${PORT}`);
-  console.log(`Admin page:       http://0.0.0.0:${PORT}/inventory_admin.html`);
-  console.log(`Public search:    http://0.0.0.0:${PORT}/inventory_search.html`);
+  console.log(`Admin page:        http://0.0.0.0:${PORT}/inventory_admin.html`);
+  console.log(`Public search:     http://0.0.0.0:${PORT}/inventory_search.html`);
 });
