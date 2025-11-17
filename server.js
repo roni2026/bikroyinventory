@@ -6,6 +6,7 @@ const sqlite3 = require('sqlite3').verbose();
 const fs = require('fs');
 const multer = require('multer');
 const csv = require('csv-parser');
+const stringSimilarity = require('string-similarity'); // <-- added for fuzzy search
 
 // --- Initialization ---
 const app = express();
@@ -77,17 +78,18 @@ app.post('/api/logout', (req, res) => {
 });
 
 // ===================================
-// === PUBLIC SEARCH ===
+// === PUBLIC SEARCH (Ranked + Fuzzy) ===
 // ===================================
 
 app.get('/api/inventory', (req, res) => {
   try {
     const raw = (req.query.search || '').toLowerCase().trim();
-    if (raw.length === 0) return res.json([]);
+    if (!raw) return res.json([]);
 
+    // Normalize input: remove special chars
     const normalized = raw.replace(/[^\p{L}\p{N}\s]+/gu, ' ');
-    const words = normalized.split(/\s+/).filter(Boolean);
-    if (words.length === 0) return res.json([]);
+    const searchWords = normalized.split(/\s+/).filter(Boolean);
+    if (searchWords.length === 0) return res.json([]);
 
     const db = getDbConnection();
     const sql = `SELECT DISTINCT category FROM inventory ORDER BY category`;
@@ -95,19 +97,51 @@ app.get('/api/inventory', (req, res) => {
     db.all(sql, [], (err, rows) => {
       if (err) {
         console.error('API Error:', err.message);
-        res.status(500).json({ error: err.message });
         db.close();
-        return;
+        return res.status(500).json({ error: err.message });
       }
 
-      const filtered = rows
-        .map(r => r.category)
-        .filter(cat => {
-          const text = (cat || '').toLowerCase().replace(/[^\p{L}\p{N}\s]+/gu, ' ');
-          return words.every(w => text.includes(w));
+      const scored = rows.map(r => {
+        const parts = r.category.split('>').map(p => p.trim().toLowerCase());
+        const searchIn = parts.length > 2 ? parts.slice(2) : parts.slice(1);
+        const targetText = searchIn.join(' ');
+
+        let score = 0;
+        let exactMatches = 0;
+        let partialMatches = 0;
+
+        searchWords.forEach(word => {
+          if (new RegExp(`\\b${word}\\b`, 'u').test(targetText)) {
+            exactMatches++;
+            score += 10; // exact match = 10 points
+          } else if (word.length >= 3 && targetText.includes(word)) {
+            partialMatches++;
+            score += 1; // partial match = 1 point
+          }
         });
 
-      res.json(filtered);
+        // Add fuzzy score (0-5) using string-similarity
+        const similarity = stringSimilarity.compareTwoStrings(raw, targetText);
+        score += similarity * 5; // weight fuzzy less than exact matches
+
+        return {
+          category: r.category,
+          score,
+          exactMatches,
+          partialMatches,
+          similarity
+        };
+      })
+      .filter(c => c.score > 0)
+      .sort((a, b) => {
+        // first exact matches, then total score, then fuzzy similarity
+        if (a.exactMatches !== b.exactMatches) return b.exactMatches - a.exactMatches;
+        if (a.score !== b.score) return b.score - a.score;
+        return b.similarity - a.similarity;
+      })
+      .map(c => c.category);
+
+      res.json(scored);
       db.close();
     });
   } catch (e) {
