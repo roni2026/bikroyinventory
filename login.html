@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bikroy Admin Login</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 font-sans antialiased flex items-center justify-center min-h-screen">
+
+    <div class="w-full max-w-md bg-white rounded-lg shadow-md overflow-hidden">
+        
+        <div class="bg-[#005B8F] p-6">
+            <img src="https://admin.bikroy.com/dist/img/bikroy/all/logos/header-38eb8769.png" 
+                 alt="Bikroy.com Logo" 
+                 class="h-10 mx-auto" 
+                 onerror="this.src='https://placehold.co/200x60/ccc/333?text=Bikroy.com'; this.onerror=null;">
+        </div>
+
+        <div class="p-8">
+            <h2 class="text-2xl font-bold text-center text-gray-800 mb-6">Inventory Admin Login</h2>
+    
+            <div id="errorMessage" class="hidden p-3 mb-4 bg-red-100 border border-red-400 text-red-700 rounded-lg">
+                Invalid username or password.
+            </div>
+    
+            <form id="loginForm" class="space-y-4">
+                <div>
+                    <label for="username" class="block text-sm font-medium text-gray-700">Username</label>
+                    <input type="text" id="username" name="username" required 
+                           class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div>
+                    <label for="password" class="block text-sm font-medium text-gray-700">Password</label>
+                    <input type="password" id="password" name="password" required
+                           class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div class="pt-2">
+                    <button type="submit" 
+                            class="w-full text-white bg-blue-600 hover:bg-blue-700 focus:ring-4 focus:ring-blue-300 font-medium rounded-lg text-sm px-5 py-2.5 text-center transition-colors">
+                        Login
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const loginForm = document.getElementById('loginForm');
+        const errorMessage = document.getElementById('errorMessage');
+
+        // NOTE: We no longer check sessionStorage. The server will do this.
+        // If a user with a valid cookie visits login.html, your server
+        // should ideally redirect them to inventory_admin.html automatically.
+
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            errorMessage.classList.add('hidden'); // Hide error on new submit
+            
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+
+            try {
+                const response = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+
+                if (response.ok) {
+                    // Success! The server has set the cookie.
+                    // Now redirect to the admin page.
+                    window.location.href = 'inventory_admin.html';
+                } else {
+                    // Failed login
+                    errorMessage.textContent = 'Invalid username or password.'; // Reset message text
+                    errorMessage.classList.remove('hidden');
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                errorMessage.textContent = 'A network error occurred. Please try again.';
+                errorMessage.classList.remove('hidden');
+            }
+        });
+    </script>
+
+</body>
+</html>
