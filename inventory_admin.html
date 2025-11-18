@@ -37,6 +37,7 @@
     <div class="lg:col-span-1 space-y-8 h-fit sticky top-8">
       <div class="bg-white p-6 rounded-lg shadow-md">
         <h2 id="formTitle" class="text-2xl font-semibold text-gray-800 mb-5">Add New Item</h2>
+        
         <form id="inventoryForm" class="space-y-4">
           <input type="hidden" id="editItemId" value="">
 
@@ -53,6 +54,23 @@
                    class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                    placeholder="Laptop Pro 15&quot;" />
           </div>
+          
+          <div>
+            <label for="itemImageFile" class="block text-sm font-medium text-gray-700">Image Filename (Optional)</label>
+            <input type="text" id="itemImageFile" name="itemImageFile"
+                   class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                   placeholder="e.g., laptop.png" />
+            <p class="mt-1 text-xs text-gray-500">
+              Upload image to GitHub /images/ folder, then enter filename here.
+            </p>
+          </div>
+    
+          <div>
+            <label for="itemComment" class="block text-sm font-medium text-gray-700">Image Comment (Optional)</label>
+            <textarea id="itemComment" name="itemComment" rows="2"
+                   class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                   placeholder="e.g., 'Model 15 Pro, 2025'"></textarea>
+          </div>
 
           <div class="flex space-x-3 pt-2">
             <button type="submit" id="submitButton"
@@ -65,6 +83,7 @@
             </button>
           </div>
         </form>
+        
       </div>
 
       <div class="bg-white p-6 rounded-lg shadow-md">
@@ -129,9 +148,6 @@ const logoutButton = document.getElementById('logoutButton');
 
 // --- Auth & Data Functions (Server-Side) ---
 
-/**
- * [NEW] Fetches all inventory data from the server.
- */
 async function getInventory() {
   try {
     const response = await fetch('/api/inventory/admin');
@@ -140,17 +156,13 @@ async function getInventory() {
   } catch (error) {
     console.error(error);
     inventoryListEl.innerHTML = `<div class="p-5 text-center bg-red-100 rounded-lg text-red-700">Error: Could not load inventory.</div>`;
-    return []; // Return empty on error
+    return []; 
   }
 }
 
-/**
- * [MODIFIED] Fetches data first, then renders the list.
- */
 async function renderInventory(filterText = '') {
-  inventoryListEl.innerHTML = '<div>Loading...</div>'; // Show loading state
-  
-  const inventoryData = await getInventory(); // Fetch fresh data
+  inventoryListEl.innerHTML = '<div>Loading...</div>'; 
+  const inventoryData = await getInventory();
   inventoryListEl.innerHTML = '';
 
   const filtered = inventoryData.filter(item =>
@@ -173,6 +185,9 @@ async function renderInventory(filterText = '') {
     el.innerHTML = `
       <div class="flex-1 min-w-0">
         <p class="text-md font-medium text-gray-800" title="${item.category}">${item.category}</p>
+        ${item.image_filename ? 
+          `<p class="text-sm text-gray-500 truncate">Image: ${item.image_filename}</p>` : 
+          ''}
       </div>
       <div class="flex-shrink-0 flex space-x-2 mt-4 sm:mt-0 sm:ml-4">
         <button onclick="handleEdit(${item.id})" class="text-sm font-medium text-blue-600 hover:text-blue-800 transition-colors">Edit</button>
@@ -182,20 +197,16 @@ async function renderInventory(filterText = '') {
   });
 }
 
-/**
- * [NEW] Resets the Add/Edit form.
- */
 function resetForm() {
   form.reset();
   editItemId.value = '';
+  document.getElementById('itemImageFile').value = '';
+  document.getElementById('itemComment').value = '';
   formTitle.textContent = 'Add New Item';
   submitButton.textContent = 'Add Item';
   cancelButton.classList.add('hidden');
 }
 
-/**
- * [MODIFIED] Handles form submit for both ADD (POST) and EDIT (PUT).
- */
 async function handleSubmit(e) {
   e.preventDefault();
   const idToEdit = editItemId.value ? parseInt(editItemId.value, 10) : null;
@@ -203,20 +214,22 @@ async function handleSubmit(e) {
   const name = document.getElementById('itemName').value.trim();
   const fullCategory = category && name ? `${category} > ${name}` : category;
 
-  // This is the new data format. Your server API will expect this.
-  const itemData = { name, category: fullCategory };
+  const itemData = {
+    name: name,
+    category: fullCategory,
+    image_filename: document.getElementById('itemImageFile').value.trim(),
+    image_comment: document.getElementById('itemComment').value.trim()
+  };
 
   try {
     let response;
     if (idToEdit) {
-      // UPDATE (PUT)
       response = await fetch(`/api/inventory/${idToEdit}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(itemData)
       });
     } else {
-      // CREATE (POST)
       response = await fetch('/api/inventory', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -226,7 +239,6 @@ async function handleSubmit(e) {
 
     if (!response.ok) throw new Error('Failed to save item');
 
-    // Success! Re-render the list and reset the form.
     renderInventory(searchInput.value);
     resetForm();
 
@@ -236,23 +248,23 @@ async function handleSubmit(e) {
   }
 }
 
-/**
- * [MODIFIED] Fetches a single item's data to populate the edit form.
- */
 window.handleEdit = async (id) => {
   try {
-    const response = await fetch(`/api/inventory/${id}`); // Assumes GET /api/inventory/:id endpoint
+    const response = await fetch(`/api/inventory/${id}`); 
     if (!response.ok) throw new Error('Failed to fetch item');
     const item = await response.json();
     
     editItemId.value = item.id;
-    // Parse the full category string back into the form fields
+    
     const parts = item.category.split('>');
     const name = parts.pop() || '';
     const category = parts.join(' > ');
 
     document.getElementById('itemName').value = name.trim();
     document.getElementById('itemCategory').value = category.trim();
+    document.getElementById('itemImageFile').value = item.image_filename || '';
+    document.getElementById('itemComment').value = item.image_comment || '';
+    
     formTitle.textContent = 'Edit Item';
     submitButton.textContent = 'Update Item';
     cancelButton.classList.remove('hidden');
@@ -263,9 +275,7 @@ window.handleEdit = async (id) => {
   }
 };
 
-/**
- * [MODIFIED] Sends a DELETE request to the server.
- */
+
 window.handleDelete = async (id) => {
   if (confirm('Are you sure you want to delete this item?')) {
     try {
@@ -273,10 +283,7 @@ window.handleDelete = async (id) => {
         method: 'DELETE'
       });
       if (!response.ok) throw new Error('Failed to delete');
-      
-      // Success, re-render the list
       renderInventory(searchInput.value);
-
     } catch (error) {
       console.error('Error deleting item:', error);
       alert('Failed to delete item.');
@@ -284,13 +291,9 @@ window.handleDelete = async (id) => {
   }
 };
 
-/**
- * [NEW] Logs the user out by calling the logout API and redirecting.
- */
 async function handleLogout() {
   try {
     await fetch('/api/logout', { method: 'POST' });
-    // Redirect to login page regardless of response
     window.location.href = 'login.html';
   } catch (error) {
     console.error('Logout error:', error);
@@ -298,38 +301,36 @@ async function handleLogout() {
   }
 }
 
-/**
- * [MODIFIED] Uploads the CSV file to the server for processing.
- */
 async function handleCsvUpload() {
   const file = csvFileInput.files[0];
   if (!file) return showMessage('Please select a CSV file.', 'red');
   
   const formData = new FormData();
-  formData.append('csvFile', file); // Server must expect 'csvFile'
+  formData.append('csvFile', file); 
 
   showMessage('Uploading and processing...', 'yellow');
 
   try {
-    const response = await fetch('/api/inventory/upload', { // Assumes POST /api/inventory/upload
+    const response = await fetch('/api/inventory/upload', {
       method: 'POST',
       body: formData
     });
 
-    const result = await response.json(); // Server should return { message, count }
+    const result = await response.json(); 
     if (!response.ok) throw new Error(result.message || 'Upload failed');
     
     showMessage(result.message || `Added ${result.count || 0} new items.`, 'green');
-    csvFileInput.value = ''; // Clear input
-    renderInventory(searchInput.value); // Re-render the list
+    csvFileInput.value = '';
+    renderInventory(searchInput.value); 
   } catch (error) {
     console.error('Error uploading CSV:', error);
     showMessage(error.message, 'red');
   }
 }
 
+// ***** FUNCTION RESTORED *****
 /**
- * [MODIFIED] Fetches data from server *then* builds the CSV.
+ * Fetches data from server *then* builds the CSV.
  */
 async function exportToCsv() {
   showMessage('Fetching data for export...', 'yellow');
@@ -339,10 +340,28 @@ async function exportToCsv() {
     return showMessage('No inventory data to export.', 'yellow');
   }
 
-  // Assumes server returns items with id, name, category, and stock
-  const headers = ['id', 'name', 'category', 'stock'];
+  // Define headers
+  const headers = ['id', 'name', 'category', 'image_filename', 'image_comment'];
+  
+  // Helper to escape CSV data
+  const escapeCsv = (val) => {
+    if (val === null || val === undefined) return '';
+    const str = String(val);
+    if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+      return `"${str.replace(/"/g, '""')}"`;
+    }
+    return str;
+  };
+
+  // Map data to CSV rows
   const rows = inventoryData.map(item => 
-    [item.id, `"${item.name}"`, `"${item.category}"`, item.stock || 0].join(',')
+    [
+      item.id,
+      escapeCsv(item.name),
+      escapeCsv(item.category),
+      escapeCsv(item.image_filename),
+      escapeCsv(item.image_comment)
+    ].join(',')
   );
   
   const csvContent = [headers.join(','), ...rows].join('\n');
@@ -358,16 +377,20 @@ async function exportToCsv() {
   showMessage('Export complete.', 'green');
 }
 
+// ***** FUNCTION RESTORED *****
 /**
- * [MODIFIED] Calls a server endpoint to clean the data.
+ * Calls a server endpoint to clean the data.
  */
 async function fixData() {
+  if (!confirm('Are you sure you want to clean the data? This may alter your categories.')) {
+    return;
+  }
   showMessage('Sending request to clean data...', 'yellow');
   try {
-    const response = await fetch('/api/inventory/fix-data', { // Assumes POST /api/inventory/fix-data
+    const response = await fetch('/api/inventory/fix-data', {
       method: 'POST'
     });
-    const result = await response.json(); // Server returns { message, count }
+    const result = await response.json();
     if (!response.ok) throw new Error(result.message || 'Failed to fix data');
 
     showMessage(result.message || `Cleaned ${result.count || 0} items.`, 'green');
@@ -378,9 +401,6 @@ async function fixData() {
   }
 }
 
-/**
- * [Helper] Shows a temporary message in the CSV upload area.
- */
 function showMessage(message, color) {
   const colors = { red: 'text-red-600', green: 'text-green-600', yellow: 'text-yellow-700' };
   csvMessageArea.textContent = message;
@@ -394,32 +414,6 @@ form.addEventListener('submit', handleSubmit);
 cancelButton.addEventListener('click', resetForm);
 logoutButton.addEventListener('click', handleLogout);
 uploadCsvButton.addEventListener('click', handleCsvUpload);
+// ***** LISTENERS RESTORED *****
 document.getElementById('exportCsvButton').addEventListener('click', exportToCsv);
-document.getElementById('fixQuotesButton').addEventListener('click', fixData);
-searchInput.addEventListener('input', e => renderInventory(e.target.value));
-
-/**
- * [MODIFIED] Check auth on load, then render inventory.
- */
-document.addEventListener('DOMContentLoaded', async () => {
-  try {
-    // This is a new API endpoint you must create.
-    // It just checks for a valid cookie and returns 200 OK or 401 Unauthorized.
-    const response = await fetch('/api/check-auth');
-    if (!response.ok) {
-      // Not authorized, send back to login
-      window.location.href = 'login.html';
-    } else {
-      // User is logged in, load the inventory
-      // We don't call loadInventory() anymore, just renderInventory()
-      // which handles its own fetching.
-      renderInventory(); 
-    }
-  } catch (error) {
-    console.error('Auth check failed:', error);
-    window.location.href = 'login.html';
-  }
-});
-</script>
-</body>
-</html>
+document.getElementById('fixQuotesButton').addEventListener('
