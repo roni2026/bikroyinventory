@@ -241,7 +241,7 @@ app.post('/api/inventory/fix-data', checkAuth, (req, res) => {
   db.all("SELECT id, category, name FROM inventory", [], (err, rows) => {
     if (err) {
       db.close();
-      return res.status(5S00).json({ error: err.message });
+      return res.status(500).json({ error: err.message });
     }
 
     let cleanedCount = 0;
@@ -361,3 +361,4 @@ app.listen(PORT, "0.0.0.0", () => {
   console.log(`Admin page:        http://0.0.0.0:${PORT}/inventory_admin.html`);
   console.log(`Public search:     http://0.0.0.0:${PORT}/inventory_search.html`);
 });
+
