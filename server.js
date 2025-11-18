@@ -106,11 +106,11 @@ app.get('/api/inventory', (req, res) => {
 
       const scored = rows.map(r => {
         const parts = r.category.split('>').map(p => p.trim().toLowerCase());
-        const searchIn = parts; 
-        const targetWords = searchIn.flatMap(part => 
+        const searchIn = parts;
+        const targetWords = searchIn.flatMap(part =>
             part.replace(/[^\p{L}\p{N}\s]+/gu, ' ').split(/\s+/)
         ).filter(Boolean);
-        const targetText = searchIn.join(' '); 
+        const targetText = searchIn.join(' ');
 
         let score = 0;
         let exactMatches = 0;
@@ -119,8 +119,8 @@ app.get('/api/inventory', (req, res) => {
         searchWords.forEach(word => {
           if (targetWords.includes(word)) {
             exactMatches++;
-            score += 10; 
-          } 
+            score += 10;
+          }
           else if (word.length >= 3 && targetText.includes(word)) {
             partialMatches++;
             score += 1;
@@ -128,7 +128,7 @@ app.get('/api/inventory', (req, res) => {
         });
 
         const similarity = stringSimilarity.compareTwoStrings(raw, targetText);
-        score += similarity * 5; 
+        score += similarity * 5;
 
         // --- UPDATED RETURN OBJECT ---
         return {
@@ -141,7 +141,7 @@ app.get('/api/inventory', (req, res) => {
           image_comment: r.image_comment    // <-- Pass comment
         };
       })
-      .filter(c => c.score > 0) 
+      .filter(c => c.score > 0)
       .sort((a, b) => {
         if (a.exactMatches !== b.exactMatches) return b.exactMatches - a.exactMatches;
         if (a.score !== b.score) return b.score - a.score;
@@ -153,7 +153,7 @@ app.get('/api/inventory', (req, res) => {
           category: c.category,
           image_filename: c.image_filename,
           image_comment: c.image_comment
-      })); 
+      }));
 
       res.json(scored);
       db.close();
@@ -196,10 +196,10 @@ app.post('/api/inventory', checkAuth, (req, res) => {
   // Read new fields from JSON body
   const { name, category, image_filename, image_comment } = req.body;
   const db = getDbConnection();
-  
+
   // Use new columns in SQL
   const sql = "INSERT INTO inventory (name, category, image_filename, image_comment) VALUES (?, ?, ?, ?)";
-  
+
   db.run(sql, [name, category, image_filename, image_comment], function(err) {
     if (err) return res.status(500).json({ error: err.message });
     res.json({ id: this.lastID, ...req.body }); // Send back all data
@@ -213,10 +213,10 @@ app.put('/api/inventory/:id', checkAuth, (req, res) => {
   // Read new fields from JSON body
   const { name, category, image_filename, image_comment } = req.body;
   const db = getDbConnection();
-  
+
   // Use new columns in SQL
   const sql = "UPDATE inventory SET name = ?, category = ?, image_filename = ?, image_comment = ? WHERE id = ?";
-  
+
   db.run(sql, [name, category, image_filename, image_comment, req.params.id], function(err) {
     if (err) return res.status(500).json({ error: err.message });
     res.json({ message: 'Update successful' });
@@ -232,6 +232,71 @@ app.delete('/api/inventory/:id', checkAuth, (req, res) => {
     db.close();
   });
 });
+
+// ***** NEW ROUTE ADDED *****
+// Admin: Fix Data (Example Implementation)
+// This route cleans whitespace and buggy characters from the 'category' field.
+app.post('/api/inventory/fix-data', checkAuth, (req, res) => {
+  const db = getDbConnection();
+  db.all("SELECT id, category, name FROM inventory", [], (err, rows) => {
+    if (err) {
+      db.close();
+      return res.status(5S00).json({ error: err.message });
+    }
+
+    let cleanedCount = 0;
+    db.serialize(() => {
+      db.run("BEGIN TRANSACTION");
+      const stmt = db.prepare("UPDATE inventory SET category = ?, name = ? WHERE id = ?");
+
+      rows.forEach(row => {
+        // 1. Clean extra whitespace from all parts
+        let parts = row.category.split('>')
+                        .map(part => part.trim())
+                        .filter(part => part.length > 0);
+        
+        // 2. Fix duplicate names (e.g., "A > B > B" becomes "A > B")
+        if (parts.length > 1) {
+            const lastName = parts[parts.length - 1].toLowerCase();
+            const secondLastName = parts[parts.length - 2].toLowerCase();
+            if (lastName === secondLastName) {
+                parts.pop(); // Remove the duplicate last part
+            }
+        }
+        
+        // 3. Fix if item name is duplicated in category
+        const itemName = row.name.trim();
+        if (parts.length > 0) {
+            const lastName = parts[parts.length - 1].toLowerCase();
+            if (lastName === itemName.toLowerCase()) {
+                parts.pop(); // Remove it, it's redundant
+            }
+        }
+
+        // Re-join the category and add the name back
+        const newCategory = [...parts, itemName].join(' > ');
+        const newName = itemName; // Keep name separate and clean
+
+        // Only run UPDATE if data actually changed
+        if (newCategory !== row.category || newName !== row.name) {
+          stmt.run(newCategory, newName, row.id);
+          cleanedCount++;
+        }
+      });
+
+      stmt.finalize();
+      db.run("COMMIT", (err) => {
+        if (err) {
+          db.close();
+          return res.status(500).json({ message: 'Database transaction failed.' });
+        }
+        res.status(200).json({ message: `Successfully cleaned ${cleanedCount} items.`, count: cleanedCount });
+        db.close();
+      });
+    });
+  });
+});
+// ***** END OF NEW ROUTE *****
 
 // This CSV upload route remains UNCHANGED
 app.post('/api/inventory/upload', checkAuth, upload.single('csvFile'), (req, res) => {
