@@ -22,6 +22,7 @@ function getDbConnection() {
 }
 
 // --- Multer Config ---
+// This upload is ONLY for the CSV. Admin item adding is now JSON.
 const upload = multer({ dest: 'uploads/' });
 
 // --- Middleware ---
@@ -87,13 +88,14 @@ app.get('/api/inventory', (req, res) => {
     const raw = (req.query.search || '').toLowerCase().trim();
     if (!raw) return res.json([]);
 
-    // Normalize input: remove special chars, keep letters/numbers/spaces
     const normalized = raw.replace(/[^\p{L}\p{N}\s]+/gu, ' ');
     const searchWords = normalized.split(/\s+/).filter(Boolean);
     if (searchWords.length === 0) return res.json([]);
 
     const db = getDbConnection();
-    const sql = `SELECT DISTINCT category FROM inventory ORDER BY category`;
+    // --- UPDATED SQL ---
+    // Select the new columns to send to the client
+    const sql = `SELECT category, image_filename, image_comment FROM inventory`;
 
     db.all(sql, [], (err, rows) => {
       if (err) {
@@ -103,22 +105,11 @@ app.get('/api/inventory', (req, res) => {
       }
 
       const scored = rows.map(r => {
-        // --- NEW UNICODE-SAFE LOGIC ---
-        
-        // 1. Get all parts of the category
-        // e.g., "Electronics > Mobile Phones" -> ['electronics', 'mobile phones']
         const parts = r.category.split('>').map(p => p.trim().toLowerCase());
-        const searchIn = parts; // Search all parts, not skipping any
-
-        // 2. Create a "bag of words" for exact matching (Unicode-safe)
-        // This splits "mobile phones" into "mobile", "phones"
-        // This is the FIX for Bangla.
+        const searchIn = parts; 
         const targetWords = searchIn.flatMap(part => 
             part.replace(/[^\p{L}\p{N}\s]+/gu, ' ').split(/\s+/)
         ).filter(Boolean);
-
-        // 3. Create the full text for partial/fuzzy matching
-        // e.g., "electronics mobile phones apple iphone 15"
         const targetText = searchIn.join(' '); 
 
         let score = 0;
@@ -126,43 +117,43 @@ app.get('/api/inventory', (req, res) => {
         let partialMatches = 0;
 
         searchWords.forEach(word => {
-          // Exact match: check if our "bag of words" includes the search word
-          // This is Unicode-safe and replaces the broken \b regex
           if (targetWords.includes(word)) {
             exactMatches++;
-            score += 10; // exact match = 10 points
+            score += 10; 
           } 
-          // Partial match: check if the full text string includes the search word
           else if (word.length >= 3 && targetText.includes(word)) {
             partialMatches++;
-            score += 1; // partial match = 1 point
+            score += 1;
           }
         });
-        // --- END OF NEW LOGIC ---
 
-        // Add fuzzy score (0-5) using string-similarity
         const similarity = stringSimilarity.compareTwoStrings(raw, targetText);
-        score += similarity * 5; // weight fuzzy less than exact matches
+        score += similarity * 5; 
 
+        // --- UPDATED RETURN OBJECT ---
         return {
           category: r.category,
           score,
           exactMatches,
           partialMatches,
-          similarity
+          similarity,
+          image_filename: r.image_filename, // <-- Pass filename
+          image_comment: r.image_comment    // <-- Pass comment
         };
       })
-      .filter(c => c.score > 0) // Don't show anything that does not match
+      .filter(c => c.score > 0) 
       .sort((a, b) => {
-        // Sort by:
-        // 1. Most exact word matches (this is your primary requirement)
         if (a.exactMatches !== b.exactMatches) return b.exactMatches - a.exactMatches;
-        // 2. Total score (handles partial/fuzzy)
         if (a.score !== b.score) return b.score - a.score;
-        // 3. Raw similarity (tie-breaker)
         return b.similarity - a.similarity;
       })
-      .map(c => c.category); // Only return the category string
+      // --- UPDATED MAP ---
+      // Return the full object, not just the category string
+      .map(c => ({
+          category: c.category,
+          image_filename: c.image_filename,
+          image_comment: c.image_comment
+      })); 
 
       res.json(scored);
       db.close();
@@ -181,6 +172,7 @@ app.get('/api/inventory', (req, res) => {
 
 app.get('/api/inventory/admin', checkAuth, (req, res) => {
   const db = getDbConnection();
+  // Select all columns so edit can populate them
   db.all("SELECT * FROM inventory ORDER BY category", [], (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json(rows);
@@ -190,6 +182,7 @@ app.get('/api/inventory/admin', checkAuth, (req, res) => {
 
 app.get('/api/inventory/:id', checkAuth, (req, res) => {
   const db = getDbConnection();
+  // Select all columns
   db.get("SELECT * FROM inventory WHERE id = ?", [req.params.id], (err, row) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json(row);
@@ -197,20 +190,34 @@ app.get('/api/inventory/:id', checkAuth, (req, res) => {
   });
 });
 
+// ***** THIS ROUTE IS UPDATED *****
+// It no longer uses multer, just plain JSON
 app.post('/api/inventory', checkAuth, (req, res) => {
-  const { name, category } = req.body;
+  // Read new fields from JSON body
+  const { name, category, image_filename, image_comment } = req.body;
   const db = getDbConnection();
-  db.run("INSERT INTO inventory (name, category) VALUES (?, ?)", [name, category], function(err) {
+  
+  // Use new columns in SQL
+  const sql = "INSERT INTO inventory (name, category, image_filename, image_comment) VALUES (?, ?, ?, ?)";
+  
+  db.run(sql, [name, category, image_filename, image_comment], function(err) {
     if (err) return res.status(500).json({ error: err.message });
-    res.json({ id: this.lastID, name, category });
+    res.json({ id: this.lastID, ...req.body }); // Send back all data
     db.close();
   });
 });
 
+// ***** THIS ROUTE IS UPDATED *****
+// It no longer uses multer, just plain JSON
 app.put('/api/inventory/:id', checkAuth, (req, res) => {
-  const { name, category } = req.body;
+  // Read new fields from JSON body
+  const { name, category, image_filename, image_comment } = req.body;
   const db = getDbConnection();
-  db.run("UPDATE inventory SET name = ?, category = ? WHERE id = ?", [name, category, req.params.id], function(err) {
+  
+  // Use new columns in SQL
+  const sql = "UPDATE inventory SET name = ?, category = ?, image_filename = ?, image_comment = ? WHERE id = ?";
+  
+  db.run(sql, [name, category, image_filename, image_comment, req.params.id], function(err) {
     if (err) return res.status(500).json({ error: err.message });
     res.json({ message: 'Update successful' });
     db.close();
@@ -226,7 +233,7 @@ app.delete('/api/inventory/:id', checkAuth, (req, res) => {
   });
 });
 
-// Admin: CSV Upload
+// This CSV upload route remains UNCHANGED
 app.post('/api/inventory/upload', checkAuth, upload.single('csvFile'), (req, res) => {
   if (!req.file) return res.status(400).json({ message: 'No file uploaded.' });
 
@@ -248,10 +255,9 @@ app.post('/api/inventory/upload', checkAuth, upload.single('csvFile'), (req, res
       let addedCount = 0;
       db.serialize(() => {
         db.run("BEGIN TRANSACTION");
+        // CSV Upload will not include image info, so we use the original SQL
         const stmt = db.prepare("INSERT INTO inventory (name, category) VALUES (?, ?)");
         results.forEach(item => {
-          // Note: The logic here seems to create 'Category > Name'
-          // e.g., "Mobiles > iPhone 15"
           const fullCategory = `${item.category} > ${item.name}`;
           stmt.run(item.name, fullCategory, function(err) {
             if (!err) addedCount++;
