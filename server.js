@@ -6,30 +6,67 @@ const sqlite3 = require('sqlite3').verbose();
 const fs = require('fs');
 const multer = require('multer');
 const csv = require('csv-parser');
-const stringSimilarity = require('string-similarity'); // <-- added for fuzzy search
+const stringSimilarity = require('string-similarity');
 
 // --- Initialization ---
 const app = express();
-const PORT = process.env.PORT || 3000; // Render uses dynamic port
+const PORT = process.env.PORT || 3000;
 const AUTH_COOKIE_NAME = 'bikroy_auth_token';
 
-// --- Database Connection ---
+// --- Database Connection & Auto-Migration ---
 function getDbConnection() {
-  const db = new sqlite3.Database('./inventory.db', (err) => {
+  return new sqlite3.Database('./inventory.db', (err) => {
     if (err) console.error('DB Connection Error:', err.message);
   });
-  return db;
 }
 
+// Initialize and upgrade database if needed
+function initializeDatabase() {
+  const db = getDbConnection();
+  
+  // Create table if it doesn't exist
+  db.run(`CREATE TABLE IF NOT EXISTS inventory (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    category TEXT NOT NULL,
+    image_filename TEXT,
+    image_comment TEXT
+  )`, (err) => {
+    if (err) {
+      console.error("Error creating table:", err);
+    } else {
+      // Check for missing columns and add them automatically
+      db.all("PRAGMA table_info(inventory)", (err, columns) => {
+        if (err) return;
+        
+        const columnNames = columns.map(c => c.name);
+        
+        if (!columnNames.includes('image_filename')) {
+          console.log("Adding missing column: image_filename");
+          db.run("ALTER TABLE inventory ADD COLUMN image_filename TEXT");
+        }
+        
+        if (!columnNames.includes('image_comment')) {
+          console.log("Adding missing column: image_comment");
+          db.run("ALTER TABLE inventory ADD COLUMN image_comment TEXT");
+        }
+      });
+    }
+  });
+  db.close();
+}
+
+// Run initialization on start
+initializeDatabase();
+
 // --- Multer Config ---
-// This upload is ONLY for the CSV. Admin item adding is now JSON.
 const upload = multer({ dest: 'uploads/' });
 
 // --- Middleware ---
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
-app.use(express.static(path.join(__dirname))); // serve HTML/CSS/JS
+app.use(express.static(path.join(__dirname)));
 
 // --- Hardcoded User ---
 const ADMIN_USER = {
@@ -60,7 +97,7 @@ app.post('/api/login', (req, res) => {
   if (username === ADMIN_USER.username && password === ADMIN_USER.password) {
     res.cookie(AUTH_COOKIE_NAME, 'VALID_TOKEN_SECRET', {
       httpOnly: true,
-      secure: false, // Set to true if using HTTPS
+      secure: false,
       maxAge: 24 * 60 * 60 * 1000
     });
     res.status(200).json({ message: 'Login successful' });
@@ -79,10 +116,9 @@ app.post('/api/logout', (req, res) => {
 });
 
 // ===================================
-// === PUBLIC SEARCH (Ranked + Fuzzy) ===
+// === PUBLIC SEARCH ===
 // ===================================
 
-// ***** THIS SECTION HAS BEEN UPDATED *****
 app.get('/api/inventory', (req, res) => {
   try {
     const raw = (req.query.search || '').toLowerCase().trim();
@@ -93,8 +129,7 @@ app.get('/api/inventory', (req, res) => {
     if (searchWords.length === 0) return res.json([]);
 
     const db = getDbConnection();
-    // --- UPDATED SQL ---
-    // Select the new columns to send to the client
+    // This query is now safe because initializeDatabase() ensures columns exist
     const sql = `SELECT category, image_filename, image_comment FROM inventory`;
 
     db.all(sql, [], (err, rows) => {
@@ -105,7 +140,9 @@ app.get('/api/inventory', (req, res) => {
       }
 
       const scored = rows.map(r => {
-        const parts = r.category.split('>').map(p => p.trim().toLowerCase());
+        // Handle potential NULLs gracefully
+        const categoryStr = r.category || '';
+        const parts = categoryStr.split('>').map(p => p.trim().toLowerCase());
         const searchIn = parts;
         const targetWords = searchIn.flatMap(part =>
             part.replace(/[^\p{L}\p{N}\s]+/gu, ' ').split(/\s+/)
@@ -130,15 +167,14 @@ app.get('/api/inventory', (req, res) => {
         const similarity = stringSimilarity.compareTwoStrings(raw, targetText);
         score += similarity * 5;
 
-        // --- UPDATED RETURN OBJECT ---
         return {
           category: r.category,
           score,
           exactMatches,
           partialMatches,
           similarity,
-          image_filename: r.image_filename, // <-- Pass filename
-          image_comment: r.image_comment    // <-- Pass comment
+          image_filename: r.image_filename || null,
+          image_comment: r.image_comment || null
         };
       })
       .filter(c => c.score > 0)
@@ -147,8 +183,6 @@ app.get('/api/inventory', (req, res) => {
         if (a.score !== b.score) return b.score - a.score;
         return b.similarity - a.similarity;
       })
-      // --- UPDATED MAP ---
-      // Return the full object, not just the category string
       .map(c => ({
           category: c.category,
           image_filename: c.image_filename,
@@ -163,8 +197,6 @@ app.get('/api/inventory', (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
-// ***** END OF UPDATED SECTION *****
-
 
 // ===================================
 // === ADMIN ROUTES ===
@@ -172,7 +204,7 @@ app.get('/api/inventory', (req, res) => {
 
 app.get('/api/inventory/admin', checkAuth, (req, res) => {
   const db = getDbConnection();
-  // Select all columns so edit can populate them
+  // Select all columns (safe now that we auto-added them)
   db.all("SELECT * FROM inventory ORDER BY category", [], (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json(rows);
@@ -182,7 +214,6 @@ app.get('/api/inventory/admin', checkAuth, (req, res) => {
 
 app.get('/api/inventory/:id', checkAuth, (req, res) => {
   const db = getDbConnection();
-  // Select all columns
   db.get("SELECT * FROM inventory WHERE id = ?", [req.params.id], (err, row) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json(row);
@@ -190,34 +221,24 @@ app.get('/api/inventory/:id', checkAuth, (req, res) => {
   });
 });
 
-// ***** THIS ROUTE IS UPDATED *****
-// It no longer uses multer, just plain JSON
 app.post('/api/inventory', checkAuth, (req, res) => {
-  // Read new fields from JSON body
   const { name, category, image_filename, image_comment } = req.body;
   const db = getDbConnection();
-
-  // Use new columns in SQL
   const sql = "INSERT INTO inventory (name, category, image_filename, image_comment) VALUES (?, ?, ?, ?)";
-
-  db.run(sql, [name, category, image_filename, image_comment], function(err) {
+  
+  db.run(sql, [name, category, image_filename || null, image_comment || null], function(err) {
     if (err) return res.status(500).json({ error: err.message });
-    res.json({ id: this.lastID, ...req.body }); // Send back all data
+    res.json({ id: this.lastID, ...req.body });
     db.close();
   });
 });
 
-// ***** THIS ROUTE IS UPDATED *****
-// It no longer uses multer, just plain JSON
 app.put('/api/inventory/:id', checkAuth, (req, res) => {
-  // Read new fields from JSON body
   const { name, category, image_filename, image_comment } = req.body;
   const db = getDbConnection();
-
-  // Use new columns in SQL
   const sql = "UPDATE inventory SET name = ?, category = ?, image_filename = ?, image_comment = ? WHERE id = ?";
-
-  db.run(sql, [name, category, image_filename, image_comment, req.params.id], function(err) {
+  
+  db.run(sql, [name, category, image_filename || null, image_comment || null, req.params.id], function(err) {
     if (err) return res.status(500).json({ error: err.message });
     res.json({ message: 'Update successful' });
     db.close();
@@ -233,9 +254,6 @@ app.delete('/api/inventory/:id', checkAuth, (req, res) => {
   });
 });
 
-// ***** NEW ROUTE ADDED *****
-// Admin: Fix Data (Example Implementation)
-// This route cleans whitespace and buggy characters from the 'category' field.
 app.post('/api/inventory/fix-data', checkAuth, (req, res) => {
   const db = getDbConnection();
   db.all("SELECT id, category, name FROM inventory", [], (err, rows) => {
@@ -250,34 +268,28 @@ app.post('/api/inventory/fix-data', checkAuth, (req, res) => {
       const stmt = db.prepare("UPDATE inventory SET category = ?, name = ? WHERE id = ?");
 
       rows.forEach(row => {
-        // 1. Clean extra whitespace from all parts
+        if (!row.category) return; // Skip empty categories
+
         let parts = row.category.split('>')
                         .map(part => part.trim())
                         .filter(part => part.length > 0);
         
-        // 2. Fix duplicate names (e.g., "A > B > B" becomes "A > B")
+        // Fix logic
         if (parts.length > 1) {
             const lastName = parts[parts.length - 1].toLowerCase();
             const secondLastName = parts[parts.length - 2].toLowerCase();
-            if (lastName === secondLastName) {
-                parts.pop(); // Remove the duplicate last part
-            }
+            if (lastName === secondLastName) parts.pop();
         }
         
-        // 3. Fix if item name is duplicated in category
-        const itemName = row.name.trim();
-        if (parts.length > 0) {
+        const itemName = row.name ? row.name.trim() : '';
+        if (parts.length > 0 && itemName) {
             const lastName = parts[parts.length - 1].toLowerCase();
-            if (lastName === itemName.toLowerCase()) {
-                parts.pop(); // Remove it, it's redundant
-            }
+            if (lastName === itemName.toLowerCase()) parts.pop();
         }
 
-        // Re-join the category and add the name back
         const newCategory = [...parts, itemName].join(' > ');
-        const newName = itemName; // Keep name separate and clean
+        const newName = itemName;
 
-        // Only run UPDATE if data actually changed
         if (newCategory !== row.category || newName !== row.name) {
           stmt.run(newCategory, newName, row.id);
           cleanedCount++;
@@ -296,9 +308,7 @@ app.post('/api/inventory/fix-data', checkAuth, (req, res) => {
     });
   });
 });
-// ***** END OF NEW ROUTE *****
 
-// This CSV upload route remains UNCHANGED
 app.post('/api/inventory/upload', checkAuth, upload.single('csvFile'), (req, res) => {
   if (!req.file) return res.status(400).json({ message: 'No file uploaded.' });
 
@@ -320,7 +330,6 @@ app.post('/api/inventory/upload', checkAuth, upload.single('csvFile'), (req, res
       let addedCount = 0;
       db.serialize(() => {
         db.run("BEGIN TRANSACTION");
-        // CSV Upload will not include image info, so we use the original SQL
         const stmt = db.prepare("INSERT INTO inventory (name, category) VALUES (?, ?)");
         results.forEach(item => {
           const fullCategory = `${item.category} > ${item.name}`;
@@ -344,21 +353,10 @@ app.post('/api/inventory/upload', checkAuth, upload.single('csvFile'), (req, res
     });
 });
 
-// ===================================
-// === PROTECTED PAGES ===
-// ===================================
-
 app.get('/inventory_admin.html', checkAuth, (req, res) => {
   res.sendFile(path.join(__dirname, 'inventory_admin.html'));
 });
 
-// ===================================
-// === SERVER START ===
-// ===================================
-
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Server running at http://0.0.0.0:${PORT}`);
-  console.log(`Admin page:        http://0.0.0.0:${PORT}/inventory_admin.html`);
-  console.log(`Public search:     http://0.0.0.0:${PORT}/inventory_search.html`);
 });
-
