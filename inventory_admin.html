@@ -83,7 +83,6 @@
             </button>
           </div>
         </form>
-        
       </div>
 
       <div class="bg-white p-6 rounded-lg shadow-md">
@@ -146,7 +145,7 @@ const csvMessageArea = document.getElementById('csvMessageArea');
 const searchInput = document.getElementById('searchInput');
 const logoutButton = document.getElementById('logoutButton');
 
-// --- Auth & Data Functions (Server-Side) ---
+// --- Auth & Data Functions ---
 
 async function getInventory() {
   try {
@@ -161,33 +160,53 @@ async function getInventory() {
 }
 
 async function renderInventory(filterText = '') {
-  inventoryListEl.innerHTML = '<div>Loading...</div>'; 
+  inventoryListEl.innerHTML = '<div class="p-4 text-center text-gray-500">Loading...</div>'; 
+  
   const inventoryData = await getInventory();
   inventoryListEl.innerHTML = '';
 
-  const filtered = inventoryData.filter(item =>
-    item.name.toLowerCase().includes(filterText.toLowerCase()) ||
-    item.category.toLowerCase().includes(filterText.toLowerCase())
-  );
-
-  if (filtered.length === 0) {
-    inventoryListEl.innerHTML = `<div class="p-5 text-center bg-white rounded-lg shadow-sm border border-gray-200">
-      <h3 class="text-lg font-medium text-gray-800">No items found.</h3>
-      <p class="text-sm text-gray-500">Try adjusting your search or adding a new item.</p>
+  // SAFE CHECK: handle missing or null data gracefully
+  if (!inventoryData || inventoryData.length === 0) {
+     inventoryListEl.innerHTML = `<div class="p-5 text-center bg-white rounded-lg shadow-sm border border-gray-200">
+      <h3 class="text-lg font-medium text-gray-800">Inventory is empty.</h3>
+      <p class="text-sm text-gray-500">Add your first item using the form.</p>
     </div>`;
     return;
   }
 
-  const sorted = [...filtered].sort((a, b) => a.category.localeCompare(b.category));
+  // SAFE FILTERING: Check for null/undefined
+  const safeFilter = filterText.toLowerCase();
+  const filtered = inventoryData.filter(item => {
+    const name = item.name ? item.name.toLowerCase() : '';
+    const category = item.category ? item.category.toLowerCase() : '';
+    return name.includes(safeFilter) || category.includes(safeFilter);
+  });
+
+  if (filtered.length === 0) {
+    inventoryListEl.innerHTML = `<div class="p-5 text-center bg-white rounded-lg shadow-sm border border-gray-200">
+      <h3 class="text-lg font-medium text-gray-800">No matches found.</h3>
+    </div>`;
+    return;
+  }
+
+  // Sort by category (safe check)
+  const sorted = [...filtered].sort((a, b) => {
+    const catA = a.category || '';
+    const catB = b.category || '';
+    return catA.localeCompare(catB);
+  });
+
   sorted.forEach(item => {
     const el = document.createElement('div');
     el.className = 'p-4 bg-white rounded-lg shadow-sm border border-gray-200 flex flex-col sm:flex-row sm:items-center sm:justify-between';
+    
+    const displayCategory = item.category || 'No Category';
+    const displayImage = item.image_filename ? `<p class="text-sm text-gray-500 truncate mt-1">Image: ${item.image_filename}</p>` : '';
+
     el.innerHTML = `
       <div class="flex-1 min-w-0">
-        <p class="text-md font-medium text-gray-800" title="${item.category}">${item.category}</p>
-        ${item.image_filename ? 
-          `<p class="text-sm text-gray-500 truncate">Image: ${item.image_filename}</p>` : 
-          ''}
+        <p class="text-md font-medium text-gray-800 break-words">${displayCategory}</p>
+        ${displayImage}
       </div>
       <div class="flex-shrink-0 flex space-x-2 mt-4 sm:mt-0 sm:ml-4">
         <button onclick="handleEdit(${item.id})" class="text-sm font-medium text-blue-600 hover:text-blue-800 transition-colors">Edit</button>
@@ -238,13 +257,12 @@ async function handleSubmit(e) {
     }
 
     if (!response.ok) throw new Error('Failed to save item');
-
     renderInventory(searchInput.value);
     resetForm();
 
   } catch (error) {
     console.error('Error saving item:', error);
-    alert('Failed to save item. Please try again.');
+    alert('Failed to save item.');
   }
 }
 
@@ -255,10 +273,9 @@ window.handleEdit = async (id) => {
     const item = await response.json();
     
     editItemId.value = item.id;
-    
-    const parts = item.category.split('>');
+    const parts = (item.category || '').split('>');
     const name = parts.pop() || '';
-    const category = parts.join(' > ');
+    const category = parts.join('>');
 
     document.getElementById('itemName').value = name.trim();
     document.getElementById('itemCategory').value = category.trim();
@@ -270,23 +287,20 @@ window.handleEdit = async (id) => {
     cancelButton.classList.remove('hidden');
     form.scrollIntoView({ behavior: 'smooth' });
   } catch (error) {
-    console.error('Error fetching item for edit:', error);
-    alert('Could not load item for editing.');
+    console.error('Error fetching item:', error);
+    alert('Could not load item.');
   }
 };
 
-
 window.handleDelete = async (id) => {
-  if (confirm('Are you sure you want to delete this item?')) {
+  if (confirm('Are you sure?')) {
     try {
-      const response = await fetch(`/api/inventory/${id}`, {
-        method: 'DELETE'
-      });
-      if (!response.ok) throw new Error('Failed to delete');
+      const response = await fetch(`/api/inventory/${id}`, { method: 'DELETE' });
+      if (!response.ok) throw new Error('Failed');
       renderInventory(searchInput.value);
     } catch (error) {
-      console.error('Error deleting item:', error);
-      alert('Failed to delete item.');
+      console.error('Delete error:', error);
+      alert('Failed to delete.');
     }
   }
 };
@@ -296,72 +310,44 @@ async function handleLogout() {
     await fetch('/api/logout', { method: 'POST' });
     window.location.href = 'login.html';
   } catch (error) {
-    console.error('Logout error:', error);
     window.location.href = 'login.html';
   }
 }
 
 async function handleCsvUpload() {
   const file = csvFileInput.files[0];
-  if (!file) return showMessage('Please select a CSV file.', 'red');
+  if (!file) return showMessage('Please select a CSV.', 'red');
   
   const formData = new FormData();
   formData.append('csvFile', file); 
 
-  showMessage('Uploading and processing...', 'yellow');
-
+  showMessage('Uploading...', 'yellow');
   try {
-    const response = await fetch('/api/inventory/upload', {
-      method: 'POST',
-      body: formData
-    });
-
+    const response = await fetch('/api/inventory/upload', { method: 'POST', body: formData });
     const result = await response.json(); 
-    if (!response.ok) throw new Error(result.message || 'Upload failed');
-    
-    showMessage(result.message || `Added ${result.count || 0} new items.`, 'green');
+    if (!response.ok) throw new Error(result.message);
+    showMessage(result.message || `Added ${result.count || 0} items.`, 'green');
     csvFileInput.value = '';
     renderInventory(searchInput.value); 
   } catch (error) {
-    console.error('Error uploading CSV:', error);
     showMessage(error.message, 'red');
   }
 }
 
-// ***** FUNCTION RESTORED *****
-/**
- * Fetches data from server *then* builds the CSV.
- */
 async function exportToCsv() {
-  showMessage('Fetching data for export...', 'yellow');
-  const inventoryData = await getInventory(); // Fetch fresh data
+  showMessage('Fetching data...', 'yellow');
+  const inventoryData = await getInventory(); 
+  if (!inventoryData || inventoryData.length === 0) return showMessage('No data to export.', 'yellow');
 
-  if (inventoryData.length === 0) {
-    return showMessage('No inventory data to export.', 'yellow');
-  }
-
-  // Define headers
   const headers = ['id', 'name', 'category', 'image_filename', 'image_comment'];
-  
-  // Helper to escape CSV data
   const escapeCsv = (val) => {
     if (val === null || val === undefined) return '';
     const str = String(val);
-    if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-      return `"${str.replace(/"/g, '""')}"`;
-    }
-    return str;
+    return str.includes(',') || str.includes('"') || str.includes('\n') ? `"${str.replace(/"/g, '""')}"` : str;
   };
 
-  // Map data to CSV rows
   const rows = inventoryData.map(item => 
-    [
-      item.id,
-      escapeCsv(item.name),
-      escapeCsv(item.category),
-      escapeCsv(item.image_filename),
-      escapeCsv(item.image_comment)
-    ].join(',')
+    [item.id, escapeCsv(item.name), escapeCsv(item.category), escapeCsv(item.image_filename), escapeCsv(item.image_comment)].join(',')
   );
   
   const csvContent = [headers.join(','), ...rows].join('\n');
@@ -373,30 +359,19 @@ async function exportToCsv() {
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
-  URL.revokeObjectURL(url);
   showMessage('Export complete.', 'green');
 }
 
-// ***** FUNCTION RESTORED *****
-/**
- * Calls a server endpoint to clean the data.
- */
 async function fixData() {
-  if (!confirm('Are you sure you want to clean the data? This may alter your categories.')) {
-    return;
-  }
-  showMessage('Sending request to clean data...', 'yellow');
+  if (!confirm('This cleans whitespace. Continue?')) return;
+  showMessage('Cleaning...', 'yellow');
   try {
-    const response = await fetch('/api/inventory/fix-data', {
-      method: 'POST'
-    });
+    const response = await fetch('/api/inventory/fix-data', { method: 'POST' });
     const result = await response.json();
-    if (!response.ok) throw new Error(result.message || 'Failed to fix data');
-
+    if (!response.ok) throw new Error(result.message);
     showMessage(result.message || `Cleaned ${result.count || 0} items.`, 'green');
-    renderInventory(searchInput.value); // Re-render
+    renderInventory(searchInput.value); 
   } catch (error) {
-    console.error('Error fixing data:', error);
     showMessage(error.message, 'red');
   }
 }
@@ -408,12 +383,21 @@ function showMessage(message, color) {
   setTimeout(() => { csvMessageArea.textContent = ''; }, 5000);
 }
 
-
-// --- Event Listeners ---
 form.addEventListener('submit', handleSubmit);
 cancelButton.addEventListener('click', resetForm);
 logoutButton.addEventListener('click', handleLogout);
 uploadCsvButton.addEventListener('click', handleCsvUpload);
-// ***** LISTENERS RESTORED *****
 document.getElementById('exportCsvButton').addEventListener('click', exportToCsv);
-document.getElementById('fixQuotesButton').addEventListener('
+document.getElementById('fixQuotesButton').addEventListener('click', fixData);
+searchInput.addEventListener('input', e => renderInventory(e.target.value));
+
+document.addEventListener('DOMContentLoaded', async () => {
+  try {
+    const response = await fetch('/api/check-auth');
+    if (!response.ok) window.location.href = 'login.html';
+    else renderInventory(); 
+  } catch { window.location.href = 'login.html'; }
+});
+</script>
+</body>
+</html>
