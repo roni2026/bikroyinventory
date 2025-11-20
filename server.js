@@ -116,7 +116,7 @@ app.post('/api/logout', (req, res) => {
 });
 
 // ===================================
-// === PUBLIC SEARCH ===
+// === PUBLIC SEARCH (BY NAME) ===
 // ===================================
 
 app.get('/api/inventory', (req, res) => {
@@ -129,8 +129,7 @@ app.get('/api/inventory', (req, res) => {
     if (searchWords.length === 0) return res.json([]);
 
     const db = getDbConnection();
-    // This query is now safe because initializeDatabase() ensures columns exist
-    const sql = `SELECT category, image_filename, image_comment FROM inventory`;
+    const sql = `SELECT name, category, image_filename, image_comment FROM inventory`;
 
     db.all(sql, [], (err, rows) => {
       if (err) {
@@ -140,14 +139,10 @@ app.get('/api/inventory', (req, res) => {
       }
 
       const scored = rows.map(r => {
-        // Handle potential NULLs gracefully
+        const nameStr = r.name || '';
         const categoryStr = r.category || '';
-        const parts = categoryStr.split('>').map(p => p.trim().toLowerCase());
-        const searchIn = parts;
-        const targetWords = searchIn.flatMap(part =>
-            part.replace(/[^\p{L}\p{N}\s]+/gu, ' ').split(/\s+/)
-        ).filter(Boolean);
-        const targetText = searchIn.join(' ');
+        const searchTarget = nameStr.toLowerCase();
+        const targetWords = searchTarget.split(/\s+/).filter(Boolean);
 
         let score = 0;
         let exactMatches = 0;
@@ -157,18 +152,18 @@ app.get('/api/inventory', (req, res) => {
           if (targetWords.includes(word)) {
             exactMatches++;
             score += 10;
-          }
-          else if (word.length >= 3 && targetText.includes(word)) {
+          } else if (word.length >= 3 && searchTarget.includes(word)) {
             partialMatches++;
             score += 1;
           }
         });
 
-        const similarity = stringSimilarity.compareTwoStrings(raw, targetText);
+        const similarity = stringSimilarity.compareTwoStrings(raw, searchTarget);
         score += similarity * 5;
 
         return {
           category: r.category,
+          name: r.name,
           score,
           exactMatches,
           partialMatches,
@@ -184,9 +179,9 @@ app.get('/api/inventory', (req, res) => {
         return b.similarity - a.similarity;
       })
       .map(c => ({
-          category: c.category,
-          image_filename: c.image_filename,
-          image_comment: c.image_comment
+        category: `${c.category} > ${c.name}`,
+        image_filename: c.image_filename,
+        image_comment: c.image_comment
       }));
 
       res.json(scored);
@@ -204,7 +199,6 @@ app.get('/api/inventory', (req, res) => {
 
 app.get('/api/inventory/admin', checkAuth, (req, res) => {
   const db = getDbConnection();
-  // Select all columns (safe now that we auto-added them)
   db.all("SELECT * FROM inventory ORDER BY category", [], (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json(rows);
@@ -268,13 +262,12 @@ app.post('/api/inventory/fix-data', checkAuth, (req, res) => {
       const stmt = db.prepare("UPDATE inventory SET category = ?, name = ? WHERE id = ?");
 
       rows.forEach(row => {
-        if (!row.category) return; // Skip empty categories
+        if (!row.category) return;
 
         let parts = row.category.split('>')
                         .map(part => part.trim())
                         .filter(part => part.length > 0);
         
-        // Fix logic
         if (parts.length > 1) {
             const lastName = parts[parts.length - 1].toLowerCase();
             const secondLastName = parts[parts.length - 2].toLowerCase();
