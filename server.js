@@ -6,7 +6,6 @@ const sqlite3 = require('sqlite3').verbose();
 const fs = require('fs');
 const multer = require('multer');
 const csv = require('csv-parser');
-const stringSimilarity = require('string-similarity');
 
 // --- Initialization ---
 const app = express();
@@ -24,31 +23,28 @@ function getDbConnection() {
 function initializeDatabase() {
   const db = getDbConnection();
   
-  // Create table if it doesn't exist
   db.run(`CREATE TABLE IF NOT EXISTS inventory (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     category TEXT NOT NULL,
-    image_filename TEXT,
-    image_comment TEXT
+    imageurl TEXT,
+    comment TEXT
   )`, (err) => {
     if (err) {
       console.error("Error creating table:", err);
     } else {
-      // Check for missing columns and add them automatically
+      // Auto-add columns if they are missing (Migration)
       db.all("PRAGMA table_info(inventory)", (err, columns) => {
         if (err) return;
-        
         const columnNames = columns.map(c => c.name);
         
-        if (!columnNames.includes('image_filename')) {
-          console.log("Adding missing column: image_filename");
-          db.run("ALTER TABLE inventory ADD COLUMN image_filename TEXT");
+        if (!columnNames.includes('imageurl')) {
+          console.log("Migrating: Adding imageurl column");
+          db.run("ALTER TABLE inventory ADD COLUMN imageurl TEXT");
         }
-        
-        if (!columnNames.includes('image_comment')) {
-          console.log("Adding missing column: image_comment");
-          db.run("ALTER TABLE inventory ADD COLUMN image_comment TEXT");
+        if (!columnNames.includes('comment')) {
+          console.log("Migrating: Adding comment column");
+          db.run("ALTER TABLE inventory ADD COLUMN comment TEXT");
         }
       });
     }
@@ -56,7 +52,6 @@ function initializeDatabase() {
   db.close();
 }
 
-// Run initialization on start
 initializeDatabase();
 
 // --- Multer Config ---
@@ -89,7 +84,7 @@ function checkAuth(req, res, next) {
 }
 
 // ===================================
-// === AUTHENTICATION ROUTES ===
+// === AUTH ROUTES ===
 // ===================================
 
 app.post('/api/login', (req, res) => {
@@ -116,7 +111,7 @@ app.post('/api/logout', (req, res) => {
 });
 
 // ===================================
-// === PUBLIC SEARCH (BY NAME) ===
+// === PUBLIC SEARCH (STRICT) ===
 // ===================================
 
 app.get('/api/inventory', (req, res) => {
@@ -124,12 +119,12 @@ app.get('/api/inventory', (req, res) => {
     const raw = (req.query.search || '').toLowerCase().trim();
     if (!raw) return res.json([]);
 
-    // Normalize search string (remove special chars)
     const searchTerms = raw.split(/\s+/).filter(Boolean);
     if (searchTerms.length === 0) return res.json([]);
 
     const db = getDbConnection();
-    const sql = `SELECT name, category, image_filename, image_comment FROM inventory`;
+    // Updated to fetch imageurl and comment
+    const sql = `SELECT name, category, imageurl, comment FROM inventory`;
 
     db.all(sql, [], (err, rows) => {
       if (err) {
@@ -138,20 +133,18 @@ app.get('/api/inventory', (req, res) => {
         return res.status(500).json({ error: err.message });
       }
 
-      // STRICT FILTERING: Only return items that actually contain the search terms
+      // STRICT FILTERING
       const results = rows.filter(r => {
         const name = (r.name || '').toLowerCase();
         const category = (r.category || '').toLowerCase();
         const combined = `${name} ${category}`;
-
-        // Check if EVERY search term appears in the name or category
+        // Check if ALL search words are present in the combined string
         return searchTerms.every(term => combined.includes(term));
       })
       .map(r => ({
-        // Format: "Category > Name"
-        category: `${r.category} > ${r.name}`, 
-        image_filename: r.image_filename,
-        image_comment: r.image_comment
+        category: `${r.category} > ${r.name}`,
+        imageurl: r.imageurl,
+        comment: r.comment
       }));
 
       // Sort alphabetically
@@ -189,11 +182,12 @@ app.get('/api/inventory/:id', checkAuth, (req, res) => {
 });
 
 app.post('/api/inventory', checkAuth, (req, res) => {
-  const { name, category, image_filename, image_comment } = req.body;
+  // CHANGED: Accept imageurl and comment
+  const { name, category, imageurl, comment } = req.body;
   const db = getDbConnection();
-  const sql = "INSERT INTO inventory (name, category, image_filename, image_comment) VALUES (?, ?, ?, ?)";
+  const sql = "INSERT INTO inventory (name, category, imageurl, comment) VALUES (?, ?, ?, ?)";
   
-  db.run(sql, [name, category, image_filename || null, image_comment || null], function(err) {
+  db.run(sql, [name, category, imageurl || null, comment || null], function(err) {
     if (err) return res.status(500).json({ error: err.message });
     res.json({ id: this.lastID, ...req.body });
     db.close();
@@ -201,11 +195,12 @@ app.post('/api/inventory', checkAuth, (req, res) => {
 });
 
 app.put('/api/inventory/:id', checkAuth, (req, res) => {
-  const { name, category, image_filename, image_comment } = req.body;
+  // CHANGED: Accept imageurl and comment
+  const { name, category, imageurl, comment } = req.body;
   const db = getDbConnection();
-  const sql = "UPDATE inventory SET name = ?, category = ?, image_filename = ?, image_comment = ? WHERE id = ?";
+  const sql = "UPDATE inventory SET name = ?, category = ?, imageurl = ?, comment = ? WHERE id = ?";
   
-  db.run(sql, [name, category, image_filename || null, image_comment || null, req.params.id], function(err) {
+  db.run(sql, [name, category, imageurl || null, comment || null, req.params.id], function(err) {
     if (err) return res.status(500).json({ error: err.message });
     res.json({ message: 'Update successful' });
     db.close();
@@ -224,10 +219,7 @@ app.delete('/api/inventory/:id', checkAuth, (req, res) => {
 app.post('/api/inventory/fix-data', checkAuth, (req, res) => {
   const db = getDbConnection();
   db.all("SELECT id, category, name FROM inventory", [], (err, rows) => {
-    if (err) {
-      db.close();
-      return res.status(500).json({ error: err.message });
-    }
+    if (err) { db.close(); return res.status(500).json({ error: err.message }); }
 
     let cleanedCount = 0;
     db.serialize(() => {
@@ -236,39 +228,26 @@ app.post('/api/inventory/fix-data', checkAuth, (req, res) => {
 
       rows.forEach(row => {
         if (!row.category) return;
-
-        let parts = row.category.split('>')
-                        .map(part => part.trim())
-                        .filter(part => part.length > 0);
+        let parts = row.category.split('>').map(part => part.trim()).filter(p => p.length > 0);
         
-        if (parts.length > 1) {
-            const lastName = parts[parts.length - 1].toLowerCase();
-            const secondLastName = parts[parts.length - 2].toLowerCase();
-            if (lastName === secondLastName) parts.pop();
-        }
-        
+        // Logic to prevent "Name > Name" duplication
         const itemName = row.name ? row.name.trim() : '';
         if (parts.length > 0 && itemName) {
-            const lastName = parts[parts.length - 1].toLowerCase();
-            if (lastName === itemName.toLowerCase()) parts.pop();
+            const lastPart = parts[parts.length - 1].toLowerCase();
+            if (lastPart === itemName.toLowerCase()) parts.pop();
         }
 
-        const newCategory = [...parts, itemName].join(' > ');
-        const newName = itemName;
-
-        if (newCategory !== row.category || newName !== row.name) {
-          stmt.run(newCategory, newName, row.id);
+        const newCategory = parts.join(' > ');
+        if (newCategory !== row.category || itemName !== row.name) {
+          stmt.run(newCategory, itemName, row.id);
           cleanedCount++;
         }
       });
 
       stmt.finalize();
       db.run("COMMIT", (err) => {
-        if (err) {
-          db.close();
-          return res.status(500).json({ message: 'Database transaction failed.' });
-        }
-        res.status(200).json({ message: `Successfully cleaned ${cleanedCount} items.`, count: cleanedCount });
+        if (err) { db.close(); return res.status(500).json({ message: 'Transaction failed.' }); }
+        res.status(200).json({ message: `Cleaned ${cleanedCount} items.`, count: cleanedCount });
         db.close();
       });
     });
@@ -279,12 +258,12 @@ app.post('/api/inventory/upload', checkAuth, upload.single('csvFile'), (req, res
   if (!req.file) return res.status(400).json({ message: 'No file uploaded.' });
 
   const results = [];
-  const db = getDbConnection();
   const filePath = req.file.path;
 
   fs.createReadStream(filePath)
     .pipe(csv())
     .on('data', (data) => {
+      // Supports optional imageurl and comment in CSV too
       if (data.name && data.category) results.push(data);
     })
     .on('end', () => {
@@ -293,29 +272,29 @@ app.post('/api/inventory/upload', checkAuth, upload.single('csvFile'), (req, res
         return res.status(400).json({ message: 'CSV is empty or invalid.' });
       }
 
+      const db = getDbConnection();
       let addedCount = 0;
       db.serialize(() => {
         db.run("BEGIN TRANSACTION");
-        const stmt = db.prepare("INSERT INTO inventory (name, category) VALUES (?, ?)");
+        const stmt = db.prepare("INSERT INTO inventory (name, category, imageurl, comment) VALUES (?, ?, ?, ?)");
         results.forEach(item => {
-          const fullCategory = `${item.category} > ${item.name}`;
-          stmt.run(item.name, fullCategory, function(err) {
-            if (!err) addedCount++;
-          });
+            // Map CSV headers to DB columns
+            stmt.run(item.name, item.category, item.imageurl || null, item.comment || null, (err) => {
+                if (!err) addedCount++;
+            });
         });
         stmt.finalize();
         db.run("COMMIT", (err) => {
           fs.unlinkSync(filePath);
           if (err) return res.status(500).json({ message: 'Database transaction failed.' });
-          res.status(201).json({ message: `Successfully added ${addedCount} new items.`, count: addedCount });
+          res.status(201).json({ message: `Added ${addedCount} items.`, count: addedCount });
           db.close();
         });
       });
     })
     .on('error', () => {
       fs.unlinkSync(filePath);
-      res.status(500).json({ message: 'Error reading CSV file.' });
-      db.close();
+      res.status(500).json({ message: 'Error reading CSV.' });
     });
 });
 
@@ -326,4 +305,3 @@ app.get('/inventory_admin.html', checkAuth, (req, res) => {
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Server running at http://0.0.0.0:${PORT}`);
 });
-
