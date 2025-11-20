@@ -124,9 +124,9 @@ app.get('/api/inventory', (req, res) => {
     const raw = (req.query.search || '').toLowerCase().trim();
     if (!raw) return res.json([]);
 
-    const normalized = raw.replace(/[^\p{L}\p{N}\s]+/gu, ' ');
-    const searchWords = normalized.split(/\s+/).filter(Boolean);
-    if (searchWords.length === 0) return res.json([]);
+    // Normalize search string (remove special chars)
+    const searchTerms = raw.split(/\s+/).filter(Boolean);
+    if (searchTerms.length === 0) return res.json([]);
 
     const db = getDbConnection();
     const sql = `SELECT name, category, image_filename, image_comment FROM inventory`;
@@ -138,53 +138,26 @@ app.get('/api/inventory', (req, res) => {
         return res.status(500).json({ error: err.message });
       }
 
-      const scored = rows.map(r => {
-        const nameStr = r.name || '';
-        const categoryStr = r.category || '';
-        const searchTarget = nameStr.toLowerCase();
-        const targetWords = searchTarget.split(/\s+/).filter(Boolean);
+      // STRICT FILTERING: Only return items that actually contain the search terms
+      const results = rows.filter(r => {
+        const name = (r.name || '').toLowerCase();
+        const category = (r.category || '').toLowerCase();
+        const combined = `${name} ${category}`;
 
-        let score = 0;
-        let exactMatches = 0;
-        let partialMatches = 0;
-
-        searchWords.forEach(word => {
-          if (targetWords.includes(word)) {
-            exactMatches++;
-            score += 10;
-          } else if (word.length >= 3 && searchTarget.includes(word)) {
-            partialMatches++;
-            score += 1;
-          }
-        });
-
-        const similarity = stringSimilarity.compareTwoStrings(raw, searchTarget);
-        score += similarity * 5;
-
-        return {
-          category: r.category,
-          name: r.name,
-          score,
-          exactMatches,
-          partialMatches,
-          similarity,
-          image_filename: r.image_filename || null,
-          image_comment: r.image_comment || null
-        };
+        // Check if EVERY search term appears in the name or category
+        return searchTerms.every(term => combined.includes(term));
       })
-      .filter(c => c.score > 0)
-      .sort((a, b) => {
-        if (a.exactMatches !== b.exactMatches) return b.exactMatches - a.exactMatches;
-        if (a.score !== b.score) return b.score - a.score;
-        return b.similarity - a.similarity;
-      })
-      .map(c => ({
-        category: `${c.category} > ${c.name}`,
-        image_filename: c.image_filename,
-        image_comment: c.image_comment
+      .map(r => ({
+        // Format: "Category > Name"
+        category: `${r.category} > ${r.name}`, 
+        image_filename: r.image_filename,
+        image_comment: r.image_comment
       }));
 
-      res.json(scored);
+      // Sort alphabetically
+      results.sort((a, b) => a.category.localeCompare(b.category));
+
+      res.json(results);
       db.close();
     });
   } catch (e) {
@@ -353,3 +326,4 @@ app.get('/inventory_admin.html', checkAuth, (req, res) => {
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Server running at http://0.0.0.0:${PORT}`);
 });
+
