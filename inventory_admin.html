@@ -30,7 +30,7 @@
         </button>
       </div>
     </div>
-    <p class="text-gray-600 mt-2">Add, edit, search, delete, clean, or export inventory items.</p>
+    <p class="text-gray-600 mt-2">Manage your items, including images and comments.</p>
   </header>
 
   <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -42,34 +42,32 @@
           <input type="hidden" id="editItemId" value="">
 
           <div>
-            <label for="itemCategory" class="block text-sm font-medium text-gray-700">Category (e.g., A > B > C)</label>
+            <label for="itemCategory" class="block text-sm font-medium text-gray-700">Category</label>
             <input type="text" id="itemCategory" name="itemCategory" required
                    class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                   placeholder="Electronics > Computers > Laptops" />
+                   placeholder="Electronics > Computers" />
           </div>
 
           <div>
             <label for="itemName" class="block text-sm font-medium text-gray-700">Item Name</label>
             <input type="text" id="itemName" name="itemName" required
                    class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                   placeholder="Laptop Pro 15&quot;" />
+                   placeholder="Laptop Pro" />
           </div>
           
           <div>
-            <label for="itemImageFile" class="block text-sm font-medium text-gray-700">Image Filename (Optional)</label>
-            <input type="text" id="itemImageFile" name="itemImageFile"
+            <label for="itemImageUrl" class="block text-sm font-medium text-gray-700">Image Filename / URL</label>
+            <input type="text" id="itemImageUrl" name="itemImageUrl"
                    class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                   placeholder="e.g., laptop.png" />
-            <p class="mt-1 text-xs text-gray-500">
-              Upload image to GitHub /images/ folder, then enter filename here.
-            </p>
+                   placeholder="laptop.png" />
+            <p class="mt-1 text-xs text-gray-500">Enter the filename from your images folder.</p>
           </div>
     
           <div>
-            <label for="itemComment" class="block text-sm font-medium text-gray-700">Image Comment (Optional)</label>
+            <label for="itemComment" class="block text-sm font-medium text-gray-700">Comment / Note</label>
             <textarea id="itemComment" name="itemComment" rows="2"
                    class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                   placeholder="e.g., 'Model 15 Pro, 2025'"></textarea>
+                   placeholder="Optional notes..."></textarea>
           </div>
 
           <div class="flex space-x-3 pt-2">
@@ -93,7 +91,7 @@
             <input type="file" id="csvFileInput" name="csvFileInput" accept=".csv" required
                    class="mt-1 block w-full text-sm text-gray-900 border border-gray-300 rounded-lg cursor-pointer focus:outline-none" />
             <p class="mt-1 text-xs text-gray-500">
-              CSV must have headers: <b>name</b> and <b>category</b> (name first).
+              Headers: <b>name, category, imageurl, comment</b>
             </p>
           </div>
           <button type="button" id="uploadCsvButton"
@@ -168,7 +166,6 @@ async function renderInventory(filterText = '') {
   if (!inventoryData || inventoryData.length === 0) {
      inventoryListEl.innerHTML = `<div class="p-5 text-center bg-white rounded-lg shadow-sm border border-gray-200">
       <h3 class="text-lg font-medium text-gray-800">Inventory is empty.</h3>
-      <p class="text-sm text-gray-500">Add your first item using the form.</p>
     </div>`;
     return;
   }
@@ -197,34 +194,34 @@ async function renderInventory(filterText = '') {
     const el = document.createElement('div');
     el.className = 'p-4 bg-white rounded-lg shadow-sm border border-gray-200 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4';
     
-    // Handle potentially missing values gracefully
+    // CHANGED: Using imageurl and comment
     const displayCategory = item.category || 'No Category';
     const displayName = item.name || 'No Name';
-    const displayImage = item.image_filename || '<span class="text-gray-400 italic">None</span>';
-    const displayComment = item.image_comment || '<span class="text-gray-400 italic">None</span>';
+    const displayImage = item.imageurl || '<span class="text-gray-400 italic">None</span>';
+    const displayComment = item.comment || '<span class="text-gray-400 italic">None</span>';
 
     el.innerHTML = `
-      <div class="flex-1 min-w-0 space-y-1">
-        <div class="flex items-baseline gap-2">
-            <span class="text-xs font-bold uppercase text-blue-600 tracking-wide">Name:</span>
+      <div class="flex-1 min-w-0 space-y-2">
+        <div class="flex items-center gap-2">
+            <span class="text-xs font-bold uppercase text-blue-600 tracking-wide bg-blue-50 px-2 py-0.5 rounded">Item:</span>
             <h3 class="text-lg font-bold text-gray-900 break-words">${displayName}</h3>
         </div>
         <div class="text-sm text-gray-600">
             <span class="font-semibold text-gray-700">Category:</span> ${displayCategory}
         </div>
-        <div class="text-xs text-gray-500 grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2 bg-gray-50 p-2 rounded">
+        <div class="text-xs text-gray-500 grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2 bg-gray-50 p-2 rounded border border-gray-100">
             <div>
-                <span class="font-semibold">Image File:</span> ${displayImage}
+                <span class="font-semibold text-gray-700">Image File:</span> ${displayImage}
             </div>
             <div>
-                <span class="font-semibold">Comment:</span> ${displayComment}
+                <span class="font-semibold text-gray-700">Comment:</span> ${displayComment}
             </div>
         </div>
       </div>
       
       <div class="flex-shrink-0 flex flex-row sm:flex-col gap-2 sm:pl-4 sm:border-l sm:border-gray-200">
-        <button onclick="handleEdit(${item.id})" class="text-sm px-3 py-1 bg-blue-50 text-blue-600 rounded hover:bg-blue-100 font-medium transition-colors">Edit</button>
-        <button onclick="handleDelete(${item.id})" class="text-sm px-3 py-1 bg-red-50 text-red-600 rounded hover:bg-red-100 font-medium transition-colors">Delete</button>
+        <button onclick="handleEdit(${item.id})" class="text-sm px-3 py-1.5 bg-blue-50 text-blue-600 rounded hover:bg-blue-100 font-medium transition-colors border border-blue-200">Edit</button>
+        <button onclick="handleDelete(${item.id})" class="text-sm px-3 py-1.5 bg-red-50 text-red-600 rounded hover:bg-red-100 font-medium transition-colors border border-red-200">Delete</button>
       </div>`;
     inventoryListEl.appendChild(el);
   });
@@ -233,30 +230,27 @@ async function renderInventory(filterText = '') {
 function resetForm() {
   form.reset();
   editItemId.value = '';
-  document.getElementById('itemImageFile').value = '';
-  document.getElementById('itemComment').value = '';
+  document.getElementById('itemImageUrl').value = ''; // CHANGED
+  document.getElementById('itemComment').value = ''; 
   formTitle.textContent = 'Add New Item';
   submitButton.textContent = 'Add Item';
   cancelButton.classList.add('hidden');
 }
 
-// --- FIXED: Handle Submit (Stops mixing Name into Category) ---
 async function handleSubmit(e) {
   e.preventDefault();
   const idToEdit = editItemId.value ? parseInt(editItemId.value, 10) : null;
   
   const categoryVal = document.getElementById('itemCategory').value.trim();
   const nameVal = document.getElementById('itemName').value.trim();
-  const imageVal = document.getElementById('itemImageFile').value.trim();
+  const imageVal = document.getElementById('itemImageUrl').value.trim(); // CHANGED
   const commentVal = document.getElementById('itemComment').value.trim();
 
-  // We send the raw category and name. We do NOT combine them like "Category > Name"
-  // because the database treats them as separate columns.
   const itemData = {
     name: nameVal,
     category: categoryVal,
-    image_filename: imageVal,
-    image_comment: commentVal
+    imageurl: imageVal, // CHANGED: sending imageurl
+    comment: commentVal // CHANGED: sending comment
   };
 
   try {
@@ -285,7 +279,6 @@ async function handleSubmit(e) {
   }
 }
 
-// --- FIXED: Handle Edit (Directly loads data without splitting strings) ---
 window.handleEdit = async (id) => {
   try {
     const response = await fetch(`/api/inventory/${id}`); 
@@ -293,21 +286,15 @@ window.handleEdit = async (id) => {
     const item = await response.json();
     
     editItemId.value = item.id;
-
-    // DIRECT MAPPING: No complicated string splitting.
-    // This fixes the issue where Name was showing up in Category or vice-versa.
     document.getElementById('itemName').value = item.name || '';
     document.getElementById('itemCategory').value = item.category || '';
-    document.getElementById('itemImageFile').value = item.image_filename || '';
-    document.getElementById('itemComment').value = item.image_comment || '';
+    document.getElementById('itemImageUrl').value = item.imageurl || ''; // CHANGED
+    document.getElementById('itemComment').value = item.comment || ''; // CHANGED
     
     formTitle.textContent = 'Edit Item';
     submitButton.textContent = 'Update Item';
     cancelButton.classList.remove('hidden');
-    
-    // Scroll to top
     window.scrollTo({ top: 0, behavior: 'smooth' });
-    
   } catch (error) {
     console.error('Error fetching item:', error);
     alert('Could not load item.');
@@ -328,80 +315,63 @@ window.handleDelete = async (id) => {
 };
 
 async function handleLogout() {
-  try {
-    await fetch('/api/logout', { method: 'POST' });
-    window.location.href = 'login.html';
-  } catch (error) {
-    window.location.href = 'login.html';
-  }
+  try { await fetch('/api/logout', { method: 'POST' }); window.location.href = 'login.html'; } catch { window.location.href = 'login.html'; }
 }
 
 async function handleCsvUpload() {
   const file = csvFileInput.files[0];
   if (!file) return showMessage('Please select a CSV.', 'red');
-  
   const formData = new FormData();
   formData.append('csvFile', file); 
-
   showMessage('Uploading...', 'yellow');
   try {
     const response = await fetch('/api/inventory/upload', { method: 'POST', body: formData });
     const result = await response.json(); 
     if (!response.ok) throw new Error(result.message);
-    showMessage(result.message || `Added ${result.count || 0} items.`, 'green');
+    showMessage(result.message, 'green');
     csvFileInput.value = '';
     renderInventory(searchInput.value); 
-  } catch (error) {
-    showMessage(error.message, 'red');
-  }
+  } catch (error) { showMessage(error.message, 'red'); }
 }
 
 async function exportToCsv() {
   showMessage('Fetching data...', 'yellow');
   const inventoryData = await getInventory(); 
-  if (!inventoryData || inventoryData.length === 0) return showMessage('No data to export.', 'yellow');
-
-  const headers = ['id', 'name', 'category', 'image_filename', 'image_comment'];
+  if (!inventoryData.length) return showMessage('No data.', 'yellow');
+  // CHANGED Headers to match
+  const headers = ['id', 'name', 'category', 'imageurl', 'comment'];
   const escapeCsv = (val) => {
     if (val === null || val === undefined) return '';
     const str = String(val);
     return str.includes(',') || str.includes('"') || str.includes('\n') ? `"${str.replace(/"/g, '""')}"` : str;
   };
-
   const rows = inventoryData.map(item => 
-    [item.id, escapeCsv(item.name), escapeCsv(item.category), escapeCsv(item.image_filename), escapeCsv(item.image_comment)].join(',')
+    [item.id, escapeCsv(item.name), escapeCsv(item.category), escapeCsv(item.imageurl), escapeCsv(item.comment)].join(',')
   );
-  
-  const csvContent = [headers.join(','), ...rows].join('\n');
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
+  const blob = new Blob([[headers.join(','), ...rows].join('\n')], { type: 'text/csv;charset=utf-8;' });
   const link = document.createElement('a');
-  link.href = url;
+  link.href = URL.createObjectURL(blob);
   link.download = 'inventory_export.csv';
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+  document.body.appendChild(link); link.click(); document.body.removeChild(link);
   showMessage('Export complete.', 'green');
 }
 
 async function fixData() {
-  if (!confirm('This cleans whitespace. Continue?')) return;
+  if (!confirm('Clean whitespace?')) return;
   showMessage('Cleaning...', 'yellow');
   try {
     const response = await fetch('/api/inventory/fix-data', { method: 'POST' });
     const result = await response.json();
     if (!response.ok) throw new Error(result.message);
-    showMessage(result.message || `Cleaned ${result.count || 0} items.`, 'green');
+    showMessage(result.message, 'green');
     renderInventory(searchInput.value); 
-  } catch (error) {
-    showMessage(error.message, 'red');
-  }
+  } catch (error) { showMessage(error.message, 'red'); }
 }
 
 function showMessage(message, color) {
   const colors = { red: 'text-red-600', green: 'text-green-600', yellow: 'text-yellow-700' };
   csvMessageArea.textContent = message;
-  csvMessageArea.className = `mt-4 text-sm ${colors[color] || 'text-gray-700'}`;
+  csvMessageArea.className = `mt-4 text-sm ${colors[color]}`;
   setTimeout(() => { csvMessageArea.textContent = ''; }, 5000);
 }
 
@@ -423,4 +393,3 @@ document.addEventListener('DOMContentLoaded', async () => {
 </script>
 </body>
 </html>
-
