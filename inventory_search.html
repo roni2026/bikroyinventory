@@ -223,7 +223,24 @@
                 );
             }
         }
-
+        
+// --- NEW: Click Outside to Close ---
+        document.addEventListener('click', (event) => {
+            // If we clicked inside the list or inside the panel, do nothing
+            const clickedInsideList = inventoryList.contains(event.target);
+            const clickedInsidePanel = imagePanel.contains(event.target);
+            
+            // If we clicked somewhere else, and the panel is currently showing...
+            if (!clickedInsideList && !clickedInsidePanel && !imagePanel.classList.contains('hidden')) {
+                // Hide the panel
+                showImage(null, null);
+                // Remove active styling from list items
+                document.querySelectorAll('#inventoryList > div').forEach(el => {
+                    el.classList.remove('bg-blue-100', 'border-blue-300');
+                });
+            }
+        });
+        
         // --- Event Listeners ---
         searchInput.addEventListener('input', filterInventory);
         document.addEventListener('DOMContentLoaded', filterInventory);
@@ -232,4 +249,5 @@
 
 </body>
 </html>
+
 
