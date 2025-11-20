@@ -165,7 +165,6 @@ async function renderInventory(filterText = '') {
   const inventoryData = await getInventory();
   inventoryListEl.innerHTML = '';
 
-  // SAFE CHECK: handle missing or null data gracefully
   if (!inventoryData || inventoryData.length === 0) {
      inventoryListEl.innerHTML = `<div class="p-5 text-center bg-white rounded-lg shadow-sm border border-gray-200">
       <h3 class="text-lg font-medium text-gray-800">Inventory is empty.</h3>
@@ -174,7 +173,6 @@ async function renderInventory(filterText = '') {
     return;
   }
 
-  // SAFE FILTERING: Check for null/undefined
   const safeFilter = filterText.toLowerCase();
   const filtered = inventoryData.filter(item => {
     const name = item.name ? item.name.toLowerCase() : '';
@@ -189,7 +187,6 @@ async function renderInventory(filterText = '') {
     return;
   }
 
-  // Sort by category (safe check)
   const sorted = [...filtered].sort((a, b) => {
     const catA = a.category || '';
     const catB = b.category || '';
@@ -200,6 +197,7 @@ async function renderInventory(filterText = '') {
     const el = document.createElement('div');
     el.className = 'p-4 bg-white rounded-lg shadow-sm border border-gray-200 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4';
     
+    // Handle potentially missing values gracefully
     const displayCategory = item.category || 'No Category';
     const displayName = item.name || 'No Name';
     const displayImage = item.image_filename || '<span class="text-gray-400 italic">None</span>';
@@ -223,6 +221,7 @@ async function renderInventory(filterText = '') {
             </div>
         </div>
       </div>
+      
       <div class="flex-shrink-0 flex flex-row sm:flex-col gap-2 sm:pl-4 sm:border-l sm:border-gray-200">
         <button onclick="handleEdit(${item.id})" class="text-sm px-3 py-1 bg-blue-50 text-blue-600 rounded hover:bg-blue-100 font-medium transition-colors">Edit</button>
         <button onclick="handleDelete(${item.id})" class="text-sm px-3 py-1 bg-red-50 text-red-600 rounded hover:bg-red-100 font-medium transition-colors">Delete</button>
@@ -241,18 +240,23 @@ function resetForm() {
   cancelButton.classList.add('hidden');
 }
 
+// --- FIXED: Handle Submit (Stops mixing Name into Category) ---
 async function handleSubmit(e) {
   e.preventDefault();
   const idToEdit = editItemId.value ? parseInt(editItemId.value, 10) : null;
-  const category = document.getElementById('itemCategory').value.trim();
-  const name = document.getElementById('itemName').value.trim();
-  const fullCategory = category && name ? `${category} > ${name}` : category;
+  
+  const categoryVal = document.getElementById('itemCategory').value.trim();
+  const nameVal = document.getElementById('itemName').value.trim();
+  const imageVal = document.getElementById('itemImageFile').value.trim();
+  const commentVal = document.getElementById('itemComment').value.trim();
 
+  // We send the raw category and name. We do NOT combine them like "Category > Name"
+  // because the database treats them as separate columns.
   const itemData = {
-    name: name,
-    category: fullCategory,
-    image_filename: document.getElementById('itemImageFile').value.trim(),
-    image_comment: document.getElementById('itemComment').value.trim()
+    name: nameVal,
+    category: categoryVal,
+    image_filename: imageVal,
+    image_comment: commentVal
   };
 
   try {
@@ -281,6 +285,7 @@ async function handleSubmit(e) {
   }
 }
 
+// --- FIXED: Handle Edit (Directly loads data without splitting strings) ---
 window.handleEdit = async (id) => {
   try {
     const response = await fetch(`/api/inventory/${id}`); 
@@ -288,19 +293,21 @@ window.handleEdit = async (id) => {
     const item = await response.json();
     
     editItemId.value = item.id;
-    const parts = (item.category || '').split('>');
-    const name = parts.pop() || '';
-    const category = parts.join('>');
 
-    document.getElementById('itemName').value = name.trim();
-    document.getElementById('itemCategory').value = category.trim();
+    // DIRECT MAPPING: No complicated string splitting.
+    // This fixes the issue where Name was showing up in Category or vice-versa.
+    document.getElementById('itemName').value = item.name || '';
+    document.getElementById('itemCategory').value = item.category || '';
     document.getElementById('itemImageFile').value = item.image_filename || '';
     document.getElementById('itemComment').value = item.image_comment || '';
     
     formTitle.textContent = 'Edit Item';
     submitButton.textContent = 'Update Item';
     cancelButton.classList.remove('hidden');
-    form.scrollIntoView({ behavior: 'smooth' });
+    
+    // Scroll to top
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    
   } catch (error) {
     console.error('Error fetching item:', error);
     alert('Could not load item.');
@@ -416,3 +423,4 @@ document.addEventListener('DOMContentLoaded', async () => {
 </script>
 </body>
 </html>
+
