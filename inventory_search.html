@@ -19,8 +19,7 @@
             <div class="flex justify-between items-center h-16">
                 <div class="flex-shrink-0 flex items-center">
                     <img src="https://admin.bikroy.com/dist/img/bikroy/all/logos/header-38eb8769.png" 
-                         alt="Bikroy.com Logo" 
-                         class="h-8" 
+                         alt="Bikroy.com Logo" class="h-8" 
                          onerror="this.src='https://placehold.co/150x40/ccc/333?text=Bikroy.com'; this.onerror=null;">
                 </div>
                 <div class="flex items-center">
@@ -52,14 +51,10 @@
             </div>
         </div>
 
-        <div id="inventoryList" class="space-y-3 max-w-2xl mx-auto">
-            </div>
-
-        <div id="messageArea" class="text-center py-16 max-w-2xl mx-auto">
-            </div>
+        <div id="inventoryList" class="space-y-3 max-w-2xl mx-auto"></div>
+        <div id="messageArea" class="text-center py-16 max-w-2xl mx-auto"></div>
         
-        <aside class="w-full lg:w-1/3 xl:w-2/5 
-                       lg:absolute lg:top-8 lg:right-4 xl:right-8 mt-8 lg:mt-0">
+        <aside class="w-full lg:w-1/3 xl:w-2/5 lg:absolute lg:top-8 lg:right-4 xl:right-8 mt-8 lg:mt-0">
             <div id="imagePanel" 
                  class="bg-white rounded-lg shadow-md border border-gray-200 p-4 sticky top-8 transition-all duration-300 ease-in-out opacity-0 scale-95 hidden">
                 <img id="panelImage" src="" alt="Category Image" class="w-full h-64 object-cover rounded-md mb-4 hidden">
@@ -67,129 +62,86 @@
             </div>
         </aside>
 
-    </div> <script>
+    </div> 
+    
+    <script>
         // ***** EDIT THIS LINE *****
-        // Put the "raw" URL to your GitHub images folder here
         const GITHUB_BASE_URL = "https://raw.githubusercontent.com/roni2026/bikroyinventory/main/images/";
         // **************************
 
-        // --- DOM Elements ---
         const searchInput = document.getElementById('searchInput');
         const inventoryList = document.getElementById('inventoryList');
         const messageArea = document.getElementById('messageArea');
         
-        // --- NEW DOM Elements for Image Panel ---
-        let activeCategory = null; // Tracks the currently selected item
+        let activeCategory = null;
         const imagePanel = document.getElementById('imagePanel');
         const panelImage = document.getElementById('panelImage');
         const panelComment = document.getElementById('panelComment');
 
-        // --- Icons for messages (Restored) ---
-        const searchIconSVG = `
-            <svg class="mx-auto h-12 w-12 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd" />
-            </svg>`;
-        
-        const noResultsIconSVG = `
-            <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 10.5a.5.5 0 01.5-.5h3a.5.5 0 010 1h-3a.5.5 0 01-.5-.5zM10 13.5a.5.5 0 01.5-.5h3a.5.5 0 010 1h-3a.5.5 0 01-.5-.5z" />
-            </svg>`;
+        const searchIconSVG = `<svg class="mx-auto h-12 w-12 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd" /></svg>`;
+        const noResultsIconSVG = `<svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 10.5a.5.5 0 01.5-.5h3a.5.5 0 010 1h-3a.5.5 0 01-.5-.5zM10 13.5a.5.5 0 01.5-.5h3a.5.5 0 010 1h-3a.5.5 0 01-.5-.5z" /></svg>`;
 
-        /**
-         * Renders the list of matching categories
-         * @param {Array<object>} categories - Array of {category, image_filename, image_comment}
-         */
         function displayCategories(categories) {
             inventoryList.innerHTML = '';
-            
             categories.forEach(item => {
                 const itemEl = document.createElement('div');
                 itemEl.className = 'p-4 bg-white rounded-lg shadow-sm border border-gray-200 text-gray-800 font-medium cursor-pointer hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all';
                 itemEl.textContent = item.category;
-                itemEl.tabIndex = 0; // Make it focusable
-
-                // Add click and keypress events to show the image
+                itemEl.tabIndex = 0;
                 itemEl.addEventListener('click', () => showImage(item, itemEl));
-                itemEl.addEventListener('keypress', (e) => {
-                    if (e.key === 'Enter') showImage(item, itemEl);
-                });
-
+                itemEl.addEventListener('keypress', (e) => { if (e.key === 'Enter') showImage(item, itemEl); });
                 inventoryList.appendChild(itemEl);
             });
         }
         
-        /**
-         * Shows or hides the image panel based on the selected item.
-         */
         function showImage(item, element) {
-          // Clear active state from all other items
           document.querySelectorAll('#inventoryList > div').forEach(el => {
             el.classList.remove('bg-blue-100', 'border-blue-300');
           });
 
-          // If item is null (new search) or clicking the same item
           if (!item || activeCategory === item.category) {
             imagePanel.classList.add('opacity-0', 'scale-95', 'hidden');
             activeCategory = null;
-            return; // Hide the panel
+            return;
           }
 
-          // Set the new active item
           activeCategory = item.category;
           element.classList.add('bg-blue-100', 'border-blue-300');
 
-          // Check if item has a filename
-          if (item.image_filename) {
-            // Build the full GitHub URL
-            panelImage.src = GITHUB_BASE_URL + item.image_filename;
+          // CHANGED: Now looks for item.imageurl
+          if (item.imageurl) {
+            panelImage.src = GITHUB_BASE_URL + item.imageurl;
             panelImage.alt = item.category;
             panelImage.classList.remove('hidden');
 
-            if (item.image_comment) {
-              panelComment.textContent = item.image_comment;
+            // CHANGED: Now looks for item.comment
+            if (item.comment) {
+              panelComment.textContent = item.comment;
               panelComment.classList.remove('hidden');
             } else {
               panelComment.classList.add('hidden');
             }
             
-            // Show the panel with animation
             imagePanel.classList.remove('hidden');
-            setTimeout(() => { // 10ms delay to allow transition to apply
-                 imagePanel.classList.remove('opacity-0', 'scale-95');
-            }, 10); 
-
+            setTimeout(() => { imagePanel.classList.remove('opacity-0', 'scale-95'); }, 10); 
           } else {
-            // No image for this item, hide the panel
             imagePanel.classList.add('opacity-0', 'scale-95', 'hidden');
-            activeCategory = null; // Reset active category
+            activeCategory = null;
           }
         }
 
         function setMessage(icon, title, subtitle) {
-            messageArea.innerHTML = `
-                ${icon || searchIconSVG}
-                <h3 class="mt-2 text-lg font-medium text-gray-900">${title}</h3>
-                <p class="mt-1 text-sm text-gray-500">${subtitle}</p>
-            `;
+            messageArea.innerHTML = `${icon || searchIconSVG}<h3 class="mt-2 text-lg font-medium text-gray-900">${title}</h3><p class="mt-1 text-sm text-gray-500">${subtitle}</p>`;
             messageArea.classList.remove('hidden');
         }
 
-        /**
-         * Filters inventory by calling the server API
-         */
         async function filterInventory() {
             const searchTerm = searchInput.value.toLowerCase();
-            
-            // Hide image panel on every new search
             showImage(null, null);
 
             if (searchTerm.length === 0) {
                 inventoryList.innerHTML = '';
-                setMessage(
-                    searchIconSVG, 
-                    "Start typing to search", 
-                    "Enter an item name to see results."
-                );
+                setMessage(searchIconSVG, "Start typing to search", "Enter an item name to see results.");
                 return;
             }
 
@@ -199,55 +151,31 @@
             try {
                 const response = await fetch(`/api/inventory?search=${encodeURIComponent(searchTerm)}`);
                 if (!response.ok) throw new Error('Search failed');
-
-                // API now returns array of objects
                 const categoryObjects = await response.json(); 
 
                 if (categoryObjects.length === 0) {
-                    setMessage(
-                        noResultsIconSVG,
-                        "No categories found",
-                        "Your search didn't match any inventory items. Please try again."
-                    );
+                    setMessage(noResultsIconSVG, "No categories found", "Your search didn't match any inventory items.");
                 } else {
                     messageArea.classList.add('hidden');
-                    displayCategories(categoryObjects); // Pass the full array
+                    displayCategories(categoryObjects);
                 }
-                
             } catch (error) {
                 console.error('Search error:', error);
-                setMessage(
-                    noResultsIconSVG,
-                    "Search Error",
-                    "Could not connect to the inventory. Please try again later."
-                );
+                setMessage(noResultsIconSVG, "Search Error", "Could not connect to the inventory.");
             }
         }
-        
-// --- NEW: Click Outside to Close ---
+
         document.addEventListener('click', (event) => {
-            // If we clicked inside the list or inside the panel, do nothing
             const clickedInsideList = inventoryList.contains(event.target);
             const clickedInsidePanel = imagePanel.contains(event.target);
-            
-            // If we clicked somewhere else, and the panel is currently showing...
             if (!clickedInsideList && !clickedInsidePanel && !imagePanel.classList.contains('hidden')) {
-                // Hide the panel
                 showImage(null, null);
-                // Remove active styling from list items
-                document.querySelectorAll('#inventoryList > div').forEach(el => {
-                    el.classList.remove('bg-blue-100', 'border-blue-300');
-                });
             }
         });
-        
-        // --- Event Listeners ---
+
         searchInput.addEventListener('input', filterInventory);
         document.addEventListener('DOMContentLoaded', filterInventory);
-
     </script>
 
 </body>
 </html>
-
-
