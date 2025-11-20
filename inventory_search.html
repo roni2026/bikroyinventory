@@ -59,7 +59,7 @@
         <aside class="w-full lg:w-1/3 xl:w-2/5 lg:absolute lg:top-8 lg:right-4 xl:right-8 mt-8 lg:mt-0">
             <div id="imagePanel" 
                  class="bg-white rounded-lg shadow-md border border-gray-200 p-4 sticky top-8 transition-all duration-300 ease-in-out opacity-0 scale-95 hidden">
-                <img id="panelImage" src="" alt="Category Image" class="w-full h-64 object-contain bg-gray-50 rounded-md mb-4 hidden">
+                <img id="panelImage" src="" alt="Category Image" class="w-full h-64 object-contain bg-white rounded-md mb-4 hidden">
                 <p id="panelComment" class="text-sm text-gray-600 hidden"></p>
             </div>
         </aside>
@@ -67,7 +67,8 @@
     </div> 
 
     <script>
-        // Base URL for filenames
+        // --- CONFIGURATION ---
+        // This points directly to the raw files in your repo's 'images' folder
         const GITHUB_BASE_URL = "https://raw.githubusercontent.com/roni2026/bikroyinventory/main/images/";
 
         // --- DOM Elements ---
@@ -75,13 +76,13 @@
         const inventoryList = document.getElementById('inventoryList');
         const messageArea = document.getElementById('messageArea');
         
-        // --- DOM Elements for Image Panel ---
+        // --- Image Panel Elements ---
         let activeCategory = null; 
         const imagePanel = document.getElementById('imagePanel');
         const panelImage = document.getElementById('panelImage');
         const panelComment = document.getElementById('panelComment');
 
-        // --- Icons ---
+        // --- SVG Icons ---
         const searchIconSVG = `<svg class="mx-auto h-12 w-12 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd" /></svg>`;
         const noResultsIconSVG = `<svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 10.5a.5.5 0 01.5-.5h3a.5.5 0 010 1h-3a.5.5 0 01-.5-.5zM10 13.5a.5.5 0 01.5-.5h3a.5.5 0 010 1h-3a.5.5 0 01-.5-.5z" /></svg>`;
 
@@ -92,22 +93,29 @@
                 itemEl.className = 'p-4 bg-white rounded-lg shadow-sm border border-gray-200 text-gray-800 font-medium cursor-pointer hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all';
                 itemEl.textContent = item.category;
                 itemEl.tabIndex = 0;
+                
+                // Prevent bubbling so the global click listener doesn't hide it immediately
                 itemEl.addEventListener('click', (e) => {
-                    e.stopPropagation(); // Stop click from bubbling to document
+                    e.stopPropagation(); 
                     showImage(item, itemEl);
                 });
                 itemEl.addEventListener('keypress', (e) => {
-                    if (e.key === 'Enter') showImage(item, itemEl);
+                    if (e.key === 'Enter') {
+                        e.stopPropagation();
+                        showImage(item, itemEl);
+                    }
                 });
                 inventoryList.appendChild(itemEl);
             });
         }
         
         function showImage(item, element) {
+          // Reset styles
           document.querySelectorAll('#inventoryList > div').forEach(el => {
             el.classList.remove('bg-blue-100', 'border-blue-300');
           });
 
+          // Toggle off if clicking same item
           if (!item || activeCategory === item.category) {
             imagePanel.classList.add('opacity-0', 'scale-95', 'hidden');
             activeCategory = null;
@@ -115,26 +123,16 @@
           }
 
           activeCategory = item.category;
-          element.classList.add('bg-blue-100', 'border-blue-300');
+          if(element) element.classList.add('bg-blue-100', 'border-blue-300');
 
+          // --- MAIN FIX: Concatenate Base URL + Image Filename ---
           if (item.imageurl) {
-            let finalUrl = item.imageurl.trim();
-
-            // 1. Handle Full URLs vs Filenames
-            if (!finalUrl.startsWith('http')) {
-                // If it's just "mudheater.png", add the base path
-                finalUrl = GITHUB_BASE_URL + finalUrl;
-            }
-
-            // 2. Handle "blob" links (HTML pages) vs "raw" links (Images)
-            // If user pasted: https://github.com/.../blob/.../image.png
-            // We convert to: https://raw.githubusercontent.com/.../.../image.png
-            if (finalUrl.includes('github.com') && finalUrl.includes('/blob/')) {
-                finalUrl = finalUrl.replace('github.com', 'raw.githubusercontent.com')
-                                   .replace('/blob/', '/');
-            }
-
-            panelImage.src = finalUrl;
+            const filename = item.imageurl.trim();
+            
+            // Construct the full URL
+            // e.g., "https://.../images/" + "mudheater.png"
+            panelImage.src = GITHUB_BASE_URL + filename;
+            
             panelImage.alt = item.category;
             panelImage.classList.remove('hidden');
 
@@ -146,11 +144,12 @@
             }
             
             imagePanel.classList.remove('hidden');
+            // Small delay for fade-in animation
             setTimeout(() => { imagePanel.classList.remove('opacity-0', 'scale-95'); }, 10); 
 
           } else {
+            // Item matches but has no image
             imagePanel.classList.add('opacity-0', 'scale-95', 'hidden');
-            activeCategory = null;
           }
         }
 
@@ -161,7 +160,10 @@
 
         async function filterInventory() {
             const searchTerm = searchInput.value.toLowerCase().trim();
-            showImage(null, null); // Hide image on new search
+            
+            // Hide panel when typing
+            imagePanel.classList.add('opacity-0', 'scale-95', 'hidden');
+            activeCategory = null;
 
             if (searchTerm.length === 0) {
                 inventoryList.innerHTML = '';
@@ -195,13 +197,15 @@
             }
         }
 
-        // Global Click Listener (Close panel when clicking whitespace)
+        // Global listener to close panel when clicking blank space
         document.addEventListener('click', (event) => {
             const clickedInsideList = inventoryList.contains(event.target);
             const clickedInsidePanel = imagePanel.contains(event.target);
             
+            // If click was outside list AND outside panel
             if (!clickedInsideList && !clickedInsidePanel && !imagePanel.classList.contains('hidden')) {
-                showImage(null, null);
+                imagePanel.classList.add('opacity-0', 'scale-95', 'hidden');
+                activeCategory = null;
                 document.querySelectorAll('#inventoryList > div').forEach(el => {
                     el.classList.remove('bg-blue-100', 'border-blue-300');
                 });
