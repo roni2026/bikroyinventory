@@ -52,26 +52,23 @@
             </div>
         </div>
 
-        <div id="inventoryList" class="space-y-3 max-w-2xl mx-auto">
-            </div>
+        <div id="inventoryList" class="space-y-3 max-w-2xl mx-auto"></div>
 
-        <div id="messageArea" class="text-center py-16 max-w-2xl mx-auto">
-            </div>
+        <div id="messageArea" class="text-center py-16 max-w-2xl mx-auto"></div>
         
-        <aside class="w-full lg:w-1/3 xl:w-2/5 
-                       lg:absolute lg:top-8 lg:right-4 xl:right-8 mt-8 lg:mt-0">
+        <aside class="w-full lg:w-1/3 xl:w-2/5 lg:absolute lg:top-8 lg:right-4 xl:right-8 mt-8 lg:mt-0">
             <div id="imagePanel" 
                  class="bg-white rounded-lg shadow-md border border-gray-200 p-4 sticky top-8 transition-all duration-300 ease-in-out opacity-0 scale-95 hidden">
-                <img id="panelImage" src="" alt="Category Image" class="w-full h-64 object-cover rounded-md mb-4 hidden">
+                <img id="panelImage" src="" alt="Category Image" class="w-full h-64 object-contain bg-gray-50 rounded-md mb-4 hidden">
                 <p id="panelComment" class="text-sm text-gray-600 hidden"></p>
             </div>
         </aside>
 
-    </div> <script>
-        // ***** EDIT THIS LINE *****
-        // Put the "raw" URL to your GitHub images folder here
+    </div> 
+
+    <script>
+        // Base URL for filenames
         const GITHUB_BASE_URL = "https://raw.githubusercontent.com/roni2026/bikroyinventory/main/images/";
-        // **************************
 
         // --- DOM Elements ---
         const searchInput = document.getElementById('searchInput');
@@ -85,30 +82,23 @@
         const panelComment = document.getElementById('panelComment');
 
         // --- Icons ---
-        const searchIconSVG = `
-            <svg class="mx-auto h-12 w-12 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd" />
-            </svg>`;
-        
-        const noResultsIconSVG = `
-            <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 10.5a.5.5 0 01.5-.5h3a.5.5 0 010 1h-3a.5.5 0 01-.5-.5zM10 13.5a.5.5 0 01.5-.5h3a.5.5 0 010 1h-3a.5.5 0 01-.5-.5z" />
-            </svg>`;
+        const searchIconSVG = `<svg class="mx-auto h-12 w-12 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd" /></svg>`;
+        const noResultsIconSVG = `<svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 10.5a.5.5 0 01.5-.5h3a.5.5 0 010 1h-3a.5.5 0 01-.5-.5zM10 13.5a.5.5 0 01.5-.5h3a.5.5 0 010 1h-3a.5.5 0 01-.5-.5z" /></svg>`;
 
         function displayCategories(categories) {
             inventoryList.innerHTML = '';
-            
             categories.forEach(item => {
                 const itemEl = document.createElement('div');
                 itemEl.className = 'p-4 bg-white rounded-lg shadow-sm border border-gray-200 text-gray-800 font-medium cursor-pointer hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all';
                 itemEl.textContent = item.category;
                 itemEl.tabIndex = 0;
-
-                itemEl.addEventListener('click', () => showImage(item, itemEl));
+                itemEl.addEventListener('click', (e) => {
+                    e.stopPropagation(); // Stop click from bubbling to document
+                    showImage(item, itemEl);
+                });
                 itemEl.addEventListener('keypress', (e) => {
                     if (e.key === 'Enter') showImage(item, itemEl);
                 });
-
                 inventoryList.appendChild(itemEl);
             });
         }
@@ -127,13 +117,27 @@
           activeCategory = item.category;
           element.classList.add('bg-blue-100', 'border-blue-300');
 
-          // --- FIX 1: Check for imageurl (not image_filename) ---
           if (item.imageurl) {
-            panelImage.src = GITHUB_BASE_URL + item.imageurl;
+            let finalUrl = item.imageurl.trim();
+
+            // 1. Handle Full URLs vs Filenames
+            if (!finalUrl.startsWith('http')) {
+                // If it's just "mudheater.png", add the base path
+                finalUrl = GITHUB_BASE_URL + finalUrl;
+            }
+
+            // 2. Handle "blob" links (HTML pages) vs "raw" links (Images)
+            // If user pasted: https://github.com/.../blob/.../image.png
+            // We convert to: https://raw.githubusercontent.com/.../.../image.png
+            if (finalUrl.includes('github.com') && finalUrl.includes('/blob/')) {
+                finalUrl = finalUrl.replace('github.com', 'raw.githubusercontent.com')
+                                   .replace('/blob/', '/');
+            }
+
+            panelImage.src = finalUrl;
             panelImage.alt = item.category;
             panelImage.classList.remove('hidden');
 
-            // --- Check for comment ---
             if (item.comment) {
               panelComment.textContent = item.comment;
               panelComment.classList.remove('hidden');
@@ -142,9 +146,7 @@
             }
             
             imagePanel.classList.remove('hidden');
-            setTimeout(() => {
-                 imagePanel.classList.remove('opacity-0', 'scale-95');
-            }, 10); 
+            setTimeout(() => { imagePanel.classList.remove('opacity-0', 'scale-95'); }, 10); 
 
           } else {
             imagePanel.classList.add('opacity-0', 'scale-95', 'hidden');
@@ -153,38 +155,23 @@
         }
 
         function setMessage(icon, title, subtitle) {
-            messageArea.innerHTML = `
-                ${icon || searchIconSVG}
-                <h3 class="mt-2 text-lg font-medium text-gray-900">${title}</h3>
-                <p class="mt-1 text-sm text-gray-500">${subtitle}</p>
-            `;
+            messageArea.innerHTML = `${icon || searchIconSVG}<h3 class="mt-2 text-lg font-medium text-gray-900">${title}</h3><p class="mt-1 text-sm text-gray-500">${subtitle}</p>`;
             messageArea.classList.remove('hidden');
         }
 
         async function filterInventory() {
-            const searchTerm = searchInput.value.toLowerCase().trim(); // Trim whitespace
-            
-            // Hide image panel on every new search
-            showImage(null, null);
+            const searchTerm = searchInput.value.toLowerCase().trim();
+            showImage(null, null); // Hide image on new search
 
             if (searchTerm.length === 0) {
                 inventoryList.innerHTML = '';
-                setMessage(
-                    searchIconSVG, 
-                    "Start typing to search", 
-                    "Enter an item name to see results."
-                );
+                setMessage(searchIconSVG, "Start typing to search", "Enter an item name to see results.");
                 return;
             }
 
-            // --- FIX 2: Require at least 2 characters ---
             if (searchTerm.length < 2) {
                 inventoryList.innerHTML = '';
-                setMessage(
-                    searchIconSVG,
-                    "Keep typing...",
-                    "Please enter at least 2 characters."
-                );
+                setMessage(searchIconSVG, "Keep typing...", "Please enter at least 2 characters.");
                 return;
             }
 
@@ -194,33 +181,21 @@
             try {
                 const response = await fetch(`/api/inventory?search=${encodeURIComponent(searchTerm)}`);
                 if (!response.ok) throw new Error('Search failed');
-
                 const categoryObjects = await response.json(); 
 
                 if (categoryObjects.length === 0) {
-                    setMessage(
-                        noResultsIconSVG,
-                        "No categories found",
-                        "Your search didn't match any inventory items. Please try again."
-                    );
+                    setMessage(noResultsIconSVG, "No categories found", "Your search didn't match any inventory items.");
                 } else {
                     messageArea.classList.add('hidden');
                     displayCategories(categoryObjects); 
                 }
-                
             } catch (error) {
                 console.error('Search error:', error);
-                setMessage(
-                    noResultsIconSVG,
-                    "Search Error",
-                    "Could not connect to the inventory. Please try again later."
-                );
+                setMessage(noResultsIconSVG, "Search Error", "Could not connect to the inventory.");
             }
         }
 
-        // --- Event Listeners ---
-        
-        // Click outside to close logic
+        // Global Click Listener (Close panel when clicking whitespace)
         document.addEventListener('click', (event) => {
             const clickedInsideList = inventoryList.contains(event.target);
             const clickedInsidePanel = imagePanel.contains(event.target);
@@ -235,7 +210,6 @@
 
         searchInput.addEventListener('input', filterInventory);
         document.addEventListener('DOMContentLoaded', filterInventory);
-
     </script>
 
 </body>
