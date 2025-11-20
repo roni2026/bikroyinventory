@@ -198,19 +198,34 @@ async function renderInventory(filterText = '') {
 
   sorted.forEach(item => {
     const el = document.createElement('div');
-    el.className = 'p-4 bg-white rounded-lg shadow-sm border border-gray-200 flex flex-col sm:flex-row sm:items-center sm:justify-between';
+    el.className = 'p-4 bg-white rounded-lg shadow-sm border border-gray-200 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4';
     
     const displayCategory = item.category || 'No Category';
-    const displayImage = item.image_filename ? `<p class="text-sm text-gray-500 truncate mt-1">Image: ${item.image_filename}</p>` : '';
+    const displayName = item.name || 'No Name';
+    const displayImage = item.image_filename || '<span class="text-gray-400 italic">None</span>';
+    const displayComment = item.image_comment || '<span class="text-gray-400 italic">None</span>';
 
     el.innerHTML = `
-      <div class="flex-1 min-w-0">
-        <p class="text-md font-medium text-gray-800 break-words">${displayCategory}</p>
-        ${displayImage}
+      <div class="flex-1 min-w-0 space-y-1">
+        <div class="flex items-baseline gap-2">
+            <span class="text-xs font-bold uppercase text-blue-600 tracking-wide">Name:</span>
+            <h3 class="text-lg font-bold text-gray-900 break-words">${displayName}</h3>
+        </div>
+        <div class="text-sm text-gray-600">
+            <span class="font-semibold text-gray-700">Category:</span> ${displayCategory}
+        </div>
+        <div class="text-xs text-gray-500 grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2 bg-gray-50 p-2 rounded">
+            <div>
+                <span class="font-semibold">Image File:</span> ${displayImage}
+            </div>
+            <div>
+                <span class="font-semibold">Comment:</span> ${displayComment}
+            </div>
+        </div>
       </div>
-      <div class="flex-shrink-0 flex space-x-2 mt-4 sm:mt-0 sm:ml-4">
-        <button onclick="handleEdit(${item.id})" class="text-sm font-medium text-blue-600 hover:text-blue-800 transition-colors">Edit</button>
-        <button onclick="handleDelete(${item.id})" class="text-sm font-medium text-red-600 hover:text-red-800 transition-colors">Delete</button>
+      <div class="flex-shrink-0 flex flex-row sm:flex-col gap-2 sm:pl-4 sm:border-l sm:border-gray-200">
+        <button onclick="handleEdit(${item.id})" class="text-sm px-3 py-1 bg-blue-50 text-blue-600 rounded hover:bg-blue-100 font-medium transition-colors">Edit</button>
+        <button onclick="handleDelete(${item.id})" class="text-sm px-3 py-1 bg-red-50 text-red-600 rounded hover:bg-red-100 font-medium transition-colors">Delete</button>
       </div>`;
     inventoryListEl.appendChild(el);
   });
