@@ -32,7 +32,7 @@
         </div>
     </nav>
 
-    <div class="container mx-auto p-4 sm:p-8 max-w-7xl relative">
+    <div class="container mx-auto p-4 sm:p-8 max-w-7xl">
         
         <header class="mb-8 text-center flex flex-col items-center">
             <h1 class="text-3xl sm:text-4xl font-bold text-gray-800">Bikroy Inventory</h1>
@@ -52,23 +52,26 @@
             </div>
         </div>
 
-        <div id="inventoryList" class="space-y-3 max-w-2xl mx-auto"></div>
+        <div class="relative max-w-2xl mx-auto">
+            
+            <div id="inventoryList" class="space-y-3"></div>
+            <div id="messageArea" class="text-center py-16"></div>
 
-        <div id="messageArea" class="text-center py-16 max-w-2xl mx-auto"></div>
-        
-        <aside class="w-full lg:w-1/3 xl:w-2/5 lg:absolute lg:top-8 lg:right-4 xl:right-8 mt-8 lg:mt-0">
-            <div id="imagePanel" 
-                 class="bg-white rounded-lg shadow-md border border-gray-200 p-4 sticky top-8 transition-all duration-300 ease-in-out opacity-0 scale-95 hidden">
-                <img id="panelImage" src="" alt="Category Image" class="w-full h-64 object-contain bg-white rounded-md mb-4 hidden">
-                <p id="panelComment" class="text-sm text-gray-600 hidden"></p>
-            </div>
-        </aside>
+            <aside id="imagePanel" 
+                   class="hidden lg:block absolute left-[102%] w-80 bg-white rounded-lg shadow-lg border border-gray-200 p-4 transition-all duration-300 ease-in-out opacity-0 scale-95 z-50">
+                
+                <div class="absolute top-6 -left-2 w-4 h-4 bg-white border-l border-t border-gray-200 transform -rotate-45"></div>
+
+                <img id="panelImage" src="" alt="Category Image" class="w-full h-auto max-h-80 object-contain rounded-md mb-2 hidden">
+                <p id="panelComment" class="text-sm text-gray-600 mt-2 bg-gray-50 p-2 rounded hidden"></p>
+            </aside>
+
+        </div>
 
     </div> 
 
     <script>
         // --- CONFIGURATION ---
-        // This points directly to the raw files in your repo's 'images' folder
         const GITHUB_BASE_URL = "https://raw.githubusercontent.com/roni2026/bikroyinventory/main/images/";
 
         // --- DOM Elements ---
@@ -82,7 +85,7 @@
         const panelImage = document.getElementById('panelImage');
         const panelComment = document.getElementById('panelComment');
 
-        // --- SVG Icons ---
+        // --- Icons ---
         const searchIconSVG = `<svg class="mx-auto h-12 w-12 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd" /></svg>`;
         const noResultsIconSVG = `<svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 10.5a.5.5 0 01.5-.5h3a.5.5 0 010 1h-3a.5.5 0 01-.5-.5zM10 13.5a.5.5 0 01.5-.5h3a.5.5 0 010 1h-3a.5.5 0 01-.5-.5z" /></svg>`;
 
@@ -90,7 +93,7 @@
             inventoryList.innerHTML = '';
             categories.forEach(item => {
                 const itemEl = document.createElement('div');
-                itemEl.className = 'p-4 bg-white rounded-lg shadow-sm border border-gray-200 text-gray-800 font-medium cursor-pointer hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all';
+                itemEl.className = 'p-4 bg-white rounded-lg shadow-sm border border-gray-200 text-gray-800 font-medium cursor-pointer hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all relative';
                 itemEl.textContent = item.category;
                 itemEl.tabIndex = 0;
                 
@@ -123,16 +126,17 @@
           }
 
           activeCategory = item.category;
-          if(element) element.classList.add('bg-blue-100', 'border-blue-300');
+          if(element) {
+              element.classList.add('bg-blue-100', 'border-blue-300');
+              
+              // --- NEW: Calculate Position ---
+              // This sets the top of the panel to match the top of the clicked element
+              imagePanel.style.top = element.offsetTop + 'px';
+          }
 
-          // --- MAIN FIX: Concatenate Base URL + Image Filename ---
           if (item.imageurl) {
             const filename = item.imageurl.trim();
-            
-            // Construct the full URL
-            // e.g., "https://.../images/" + "mudheater.png"
             panelImage.src = GITHUB_BASE_URL + filename;
-            
             panelImage.alt = item.category;
             panelImage.classList.remove('hidden');
 
@@ -144,11 +148,9 @@
             }
             
             imagePanel.classList.remove('hidden');
-            // Small delay for fade-in animation
             setTimeout(() => { imagePanel.classList.remove('opacity-0', 'scale-95'); }, 10); 
 
           } else {
-            // Item matches but has no image
             imagePanel.classList.add('opacity-0', 'scale-95', 'hidden');
           }
         }
@@ -161,7 +163,6 @@
         async function filterInventory() {
             const searchTerm = searchInput.value.toLowerCase().trim();
             
-            // Hide panel when typing
             imagePanel.classList.add('opacity-0', 'scale-95', 'hidden');
             activeCategory = null;
 
@@ -197,12 +198,10 @@
             }
         }
 
-        // Global listener to close panel when clicking blank space
         document.addEventListener('click', (event) => {
             const clickedInsideList = inventoryList.contains(event.target);
             const clickedInsidePanel = imagePanel.contains(event.target);
             
-            // If click was outside list AND outside panel
             if (!clickedInsideList && !clickedInsidePanel && !imagePanel.classList.contains('hidden')) {
                 imagePanel.classList.add('opacity-0', 'scale-95', 'hidden');
                 activeCategory = null;
