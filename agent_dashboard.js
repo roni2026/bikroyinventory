@@ -1,5 +1,5 @@
 // REPLACE THIS WITH YOUR ACTUAL EXTENSION ID FROM chrome://extensions
-const EXTENSION_ID = "opplljokpcnhokneilddeafhmheejbnf"; 
+const EXTENSION_ID = "lbhpnfjignnkgobcdgbahbfagnailmlp"; 
 
 const agentsList = [
     "Mehedi", "Yeamin", "Utsow", "Udoy", "Salahuddin", "Halal", 
@@ -10,7 +10,7 @@ const elements = {
     status: document.getElementById('connection-status'),
     selector: document.getElementById('agent-selector'),
     grid: document.getElementById('dashboard-grid'),
-    queues: document.getElementById('queue-stats'),
+    queues: document.getElementById('main-queue-stats'), // Changed to main container
     btnStart: document.getElementById('btn-start'),
     btnStop: document.getElementById('btn-stop'),
     btnRefresh: document.getElementById('btn-refresh')
@@ -113,14 +113,21 @@ function updateControls(isRunning) {
 function renderQueues(counts) {
     if(!counts) return;
     elements.queues.innerHTML = '';
-    const keys = ['member', 'listing_fee', 'general', 'fraud'];
+    
+    // Order of queues to display
+    const keys = ['member', 'listing_fee', 'general', 'fraud', 'edited', 'verification'];
+    const labels = { 'member': 'Member', 'listing_fee': 'Listing Fee', 'general': 'General', 'fraud': 'Fraud', 'edited': 'Edited', 'verification': 'Verification' };
     
     keys.forEach(k => {
         if(counts[k] !== undefined) {
             const isHigh = counts[k] > 50;
             const div = document.createElement('div');
-            div.className = `flex flex-col px-3 py-1 rounded border ${isHigh ? 'bg-red-900/30 border-red-500 text-red-200' : 'bg-gray-800 border-gray-700 text-gray-300'}`;
-            div.innerHTML = `<span class="text-[10px] uppercase opacity-70">${k.replace('_',' ')}</span><span class="font-mono font-bold">${counts[k]}</span>`;
+            // BIGGER STYLE HERE
+            div.className = `flex flex-col items-center justify-center p-4 rounded-xl border ${isHigh ? 'bg-red-900/20 border-red-500/50 text-red-400' : 'bg-gray-800/50 border-gray-700 text-blue-400'}`;
+            div.innerHTML = `
+                <span class="text-xs uppercase text-gray-500 font-semibold tracking-wider mb-1">${labels[k] || k}</span>
+                <span class="text-3xl font-bold font-mono">${counts[k]}</span>
+            `;
             elements.queues.appendChild(div);
         }
     });
@@ -135,18 +142,18 @@ function renderGrid(data) {
         const card = document.createElement('div');
         card.className = "bg-gray-800 rounded-xl p-5 border border-gray-700 hover:border-gray-500 transition relative overflow-hidden";
         card.innerHTML = `
-            <div class="flex justify-between items-start mb-3 relative z-10">
-                <h3 class="text-lg font-bold text-white">${name}</h3>
-                <span class="text-xs bg-gray-900 px-2 py-1 rounded text-purple-400 font-mono border border-gray-700">${agent.permissions || '-'}</span>
+            <div class="flex justify-between items-start mb-4 relative z-10">
+                <h3 class="text-xl font-bold text-white">${name}</h3>
+                <span class="text-xs bg-gray-900 px-2 py-1 rounded text-purple-400 font-mono border border-gray-700 tracking-widest">${agent.permissions || '-'}</span>
             </div>
             <div class="grid grid-cols-2 gap-3 relative z-10">
-                <div class="bg-gray-900/50 rounded p-2 text-center">
-                    <div class="text-2xl font-bold text-blue-400 font-mono">${agent.thisHourAds || 0}</div>
-                    <div class="text-[10px] uppercase text-gray-500">This Hour</div>
+                <div class="bg-gray-900/50 rounded-lg p-3 text-center border border-gray-700/50">
+                    <div class="text-3xl font-bold text-blue-500 font-mono mb-1">${agent.thisHourAds || 0}</div>
+                    <div class="text-[10px] uppercase text-gray-500 font-semibold tracking-wider">This Hour</div>
                 </div>
-                <div class="bg-gray-900/50 rounded p-2 text-center">
-                    <div class="text-2xl font-bold text-green-400 font-mono">${agent.cumulativeNewAds || 0}</div>
-                    <div class="text-[10px] uppercase text-gray-500">Session</div>
+                <div class="bg-gray-900/50 rounded-lg p-3 text-center border border-gray-700/50">
+                    <div class="text-3xl font-bold text-green-500 font-mono mb-1">${agent.cumulativeNewAds || 0}</div>
+                    <div class="text-[10px] uppercase text-gray-500 font-semibold tracking-wider">Session</div>
                 </div>
             </div>
         `;
