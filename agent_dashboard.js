@@ -1,5 +1,5 @@
 // REPLACE THIS WITH YOUR ACTUAL EXTENSION ID FROM chrome://extensions
-const EXTENSION_ID = "hkikdkkhlppjcklcglmkiafelnbgbjhg"; 
+const EXTENSION_ID = "lbhpnfjignnkgobcdgbahbfagnailmlp"; 
 
 const agentsList = [
     "Mehedi", "Yeamin", "Utsow", "Udoy", "Salahuddin", "Halal", 
@@ -10,10 +10,17 @@ const elements = {
     status: document.getElementById('connection-status'),
     selector: document.getElementById('agent-selector'),
     grid: document.getElementById('dashboard-grid'),
-    queues: document.getElementById('main-queue-stats'), // Changed to main container
+    queues: document.getElementById('main-queue-stats'),
     btnStart: document.getElementById('btn-start'),
     btnStop: document.getElementById('btn-stop'),
-    btnRefresh: document.getElementById('btn-refresh')
+    btnRefresh: document.getElementById('btn-refresh'),
+    // Log elements
+    btnLog: document.getElementById('btn-log'),
+    logModal: document.getElementById('log-modal'),
+    closeLog: document.getElementById('close-log'),
+    logTableBody: document.getElementById('log-table-body'),
+    emptyLogMsg: document.getElementById('empty-log-msg'),
+    clearLogBtn: document.getElementById('clear-log-btn')
 };
 
 // --- Init ---
@@ -30,7 +37,6 @@ function checkExtension() {
         return;
     }
     
-    // We send a 'handshake' to see if extension is listening
     try {
         chrome.runtime.sendMessage(EXTENSION_ID, { action: "handshake" }, (response) => {
             if (chrome.runtime.lastError || !response) {
@@ -42,9 +48,7 @@ function checkExtension() {
                 fetchData();
             }
         });
-    } catch(e) {
-        console.log("Cannot reach extension");
-    }
+    } catch(e) { console.log("Cannot reach extension"); }
 }
 
 // 2. Fetch Data
@@ -56,7 +60,6 @@ function fetchData() {
         
         updateControls(res.isRunning);
         
-        // Sync checkboxes from storage if we haven't touched them
         if (res.selectedAgents) {
             document.querySelectorAll('.agent-cb').forEach(cb => {
                 if(res.selectedAgents.includes(cb.value)) cb.checked = true;
@@ -65,6 +68,9 @@ function fetchData() {
 
         renderGrid(res.agentData);
         renderQueues(res.reviewCounts);
+        
+        // Store logs globally for the modal to use
+        window.sessionLogs = res.sessionLogs || [];
     });
 }
 
@@ -83,6 +89,46 @@ elements.btnRefresh.addEventListener('click', () => {
     chrome.runtime.sendMessage(EXTENSION_ID, { action: "command", command: "refresh" }, fetchData);
 });
 
+// --- Log Modal Logic ---
+elements.btnLog.addEventListener('click', () => {
+    renderLogs(window.sessionLogs);
+    elements.logModal.classList.remove('hidden');
+    elements.logModal.classList.add('visible');
+});
+
+elements.closeLog.addEventListener('click', () => {
+    elements.logModal.classList.remove('visible');
+    elements.logModal.classList.add('hidden');
+});
+
+elements.clearLogBtn.addEventListener('click', () => {
+    if(confirm("Clear log history?")) {
+        chrome.runtime.sendMessage(EXTENSION_ID, { action: "command", command: "clearLogs" }, () => {
+             renderLogs([]);
+             window.sessionLogs = [];
+        });
+    }
+});
+
+function renderLogs(logs) {
+    elements.logTableBody.innerHTML = '';
+    if(!logs || logs.length === 0) {
+        elements.emptyLogMsg.classList.remove('hidden');
+        return;
+    }
+    elements.emptyLogMsg.classList.add('hidden');
+    
+    logs.forEach(log => {
+        const row = document.createElement('tr');
+        row.className = "bg-gray-800 border-b border-gray-700 hover:bg-gray-700";
+        row.innerHTML = `
+            <th scope="row" class="px-6 py-4 font-medium text-white whitespace-nowrap font-mono">${log.time}</th>
+            <td class="px-6 py-4 text-blue-400 font-bold font-mono">${log.hourTotal}</td>
+            <td class="px-6 py-4 text-green-400 font-bold font-mono">${log.grandTotal}</td>
+        `;
+        elements.logTableBody.appendChild(row);
+    });
+}
 
 // --- Helpers ---
 function renderSelector() {
@@ -114,19 +160,18 @@ function renderQueues(counts) {
     if(!counts) return;
     elements.queues.innerHTML = '';
     
-    // Order of queues to display
     const keys = ['member', 'listing_fee', 'general', 'fraud', 'edited', 'verification'];
-    const labels = { 'member': 'Member', 'listing_fee': 'Listing Fee', 'general': 'General', 'fraud': 'Fraud', 'edited': 'Edited', 'verification': 'Verification' };
+    const labels = { 'member': 'Mem', 'listing_fee': 'List', 'general': 'Gen', 'fraud': 'Frd', 'edited': 'Edit', 'verification': 'Ver' };
     
     keys.forEach(k => {
         if(counts[k] !== undefined) {
             const isHigh = counts[k] > 50;
             const div = document.createElement('div');
-            // BIGGER STYLE HERE
-            div.className = `flex flex-col items-center justify-center p-4 rounded-xl border ${isHigh ? 'bg-red-900/20 border-red-500/50 text-red-400' : 'bg-gray-800/50 border-gray-700 text-blue-400'}`;
+            // UPDATED: Smaller size (w-24), smaller text, purple scheme to differentiate
+            div.className = `flex flex-col items-center justify-center p-2 rounded-lg border w-24 h-16 ${isHigh ? 'bg-red-900/30 border-red-500/50 text-red-400' : 'bg-indigo-900/20 border-indigo-700/50 text-indigo-300'}`;
             div.innerHTML = `
-                <span class="text-xs uppercase text-gray-500 font-semibold tracking-wider mb-1">${labels[k] || k}</span>
-                <span class="text-3xl font-bold font-mono">${counts[k]}</span>
+                <span class="text-[10px] uppercase opacity-70 font-semibold mb-1">${labels[k] || k}</span>
+                <span class="text-xl font-bold font-mono leading-none">${counts[k]}</span>
             `;
             elements.queues.appendChild(div);
         }
@@ -140,20 +185,25 @@ function renderGrid(data) {
     Object.keys(data).sort().forEach(name => {
         const agent = data[name];
         const card = document.createElement('div');
-        card.className = "bg-gray-800 rounded-xl p-5 border border-gray-700 hover:border-gray-500 transition relative overflow-hidden";
+        card.className = "bg-gray-800 rounded-xl p-4 border border-gray-700 hover:border-gray-500 transition relative overflow-hidden";
         card.innerHTML = `
-            <div class="flex justify-between items-start mb-4 relative z-10">
-                <h3 class="text-xl font-bold text-white">${name}</h3>
-                <span class="text-xs bg-gray-900 px-2 py-1 rounded text-purple-400 font-mono border border-gray-700 tracking-widest">${agent.permissions || '-'}</span>
+            <div class="flex justify-between items-center mb-4 relative z-10">
+                <h3 class="text-lg font-bold text-white tracking-wide">${name}</h3>
+                <span class="text-[10px] bg-gray-900 px-2 py-0.5 rounded text-purple-400 font-mono border border-gray-700 tracking-widest">${agent.permissions || '-'}</span>
             </div>
-            <div class="grid grid-cols-2 gap-3 relative z-10">
-                <div class="bg-gray-900/50 rounded-lg p-3 text-center border border-gray-700/50">
-                    <div class="text-3xl font-bold text-blue-500 font-mono mb-1">${agent.thisHourAds || 0}</div>
-                    <div class="text-[10px] uppercase text-gray-500 font-semibold tracking-wider">This Hour</div>
+            <!-- 3 Column Grid for This Hour, Last Hour, Total -->
+            <div class="grid grid-cols-3 gap-2 relative z-10">
+                <div class="bg-gray-900/50 rounded-lg p-2 text-center border border-gray-700/30">
+                    <div class="text-2xl font-bold text-blue-500 font-mono">${agent.thisHourAds || 0}</div>
+                    <div class="text-[9px] uppercase text-gray-500 font-semibold tracking-wider">This Hr</div>
                 </div>
-                <div class="bg-gray-900/50 rounded-lg p-3 text-center border border-gray-700/50">
-                    <div class="text-3xl font-bold text-green-500 font-mono mb-1">${agent.cumulativeNewAds || 0}</div>
-                    <div class="text-[10px] uppercase text-gray-500 font-semibold tracking-wider">Session</div>
+                 <div class="bg-gray-900/50 rounded-lg p-2 text-center border border-gray-700/30">
+                    <div class="text-2xl font-bold text-purple-500 font-mono">${agent.lastHourAds || 0}</div>
+                    <div class="text-[9px] uppercase text-gray-500 font-semibold tracking-wider">Last Hr</div>
+                </div>
+                <div class="bg-gray-900/50 rounded-lg p-2 text-center border border-gray-700/30">
+                    <div class="text-2xl font-bold text-green-500 font-mono">${agent.cumulativeNewAds || 0}</div>
+                    <div class="text-[9px] uppercase text-gray-500 font-semibold tracking-wider">Total</div>
                 </div>
             </div>
         `;
