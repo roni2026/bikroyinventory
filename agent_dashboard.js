@@ -160,8 +160,10 @@ function renderQueues(counts) {
     if(!counts) return;
     elements.queues.innerHTML = '';
     
-    const keys = ['member', 'listing_fee', 'general', 'fraud', 'edited', 'verification'];
-    const labels = { 'member': 'Mem', 'listing_fee': 'List', 'general': 'Gen', 'fraud': 'Frd', 'edited': 'Edit', 'verification': 'Ver' };
+    // ADDED: 'manager' to keys
+    const keys = ['member', 'listing_fee', 'general', 'manager', 'fraud', 'edited', 'verification'];
+    // ADDED: 'manager': 'Mgr' to labels
+    const labels = { 'member': 'Mem', 'listing_fee': 'List', 'general': 'Gen', 'manager': 'Mgr', 'fraud': 'Frd', 'edited': 'Edit', 'verification': 'Ver' };
     
     keys.forEach(k => {
         if(counts[k] !== undefined) {
