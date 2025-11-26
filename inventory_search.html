@@ -6,11 +6,27 @@
     <title>Bikroy Inventory</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        ::-webkit-scrollbar { width: 8px; }
-        ::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 10px; }
-        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
-        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-    </style>
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 10px; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+    /* --- Camera icon for items with images --- */
+    .category-item {
+        position: relative;
+        padding-right: 24px; /* space for icon at the right */
+    }
+
+    .image-icon {
+        position: absolute;
+        right: 0;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 16px;
+        height: 16px;
+        color: #555; /* subtle gray for modern look */
+    }
+</style>
 </head>
 <body class="bg-gray-100 font-sans antialiased">
 
@@ -93,8 +109,15 @@
             inventoryList.innerHTML = '';
             categories.forEach(item => {
                 const itemEl = document.createElement('div');
-                itemEl.className = 'p-4 bg-white rounded-lg shadow-sm border border-gray-200 text-gray-800 font-medium cursor-pointer hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all relative';
-                itemEl.textContent = item.category;
+                itemEl.className = 'category-item p-4 bg-white rounded-lg shadow-sm border border-gray-200 text-gray-800 font-medium cursor-pointer hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all relative';
+                itemEl.innerHTML = item.category; // set category text
+                    if (item.imageurl) {
+                        itemEl.innerHTML += `
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="image-icon">
+        <path stroke-linecap="round" stroke-linejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z"/>
+      </svg>
+    `;
+}
                 itemEl.tabIndex = 0;
                 
                 // Prevent bubbling so the global click listener doesn't hide it immediately
@@ -217,3 +240,4 @@
 
 </body>
 </html>
+
