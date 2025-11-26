@@ -142,7 +142,7 @@ app.get('/api/inventory', (req, res) => {
         return searchTerms.every(term => combined.includes(term));
       })
       .map(r => ({
-        category: `${r.category} > ${r.name}`,
+        category: `${r.category} > ${r.name}` + (r.imageurl ? " 📷" : ""),
         imageurl: r.imageurl,
         comment: r.comment
       }));
@@ -305,3 +305,4 @@ app.get('/inventory_admin.html', checkAuth, (req, res) => {
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Server running at http://0.0.0.0:${PORT}`);
 });
+
