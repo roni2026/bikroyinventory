@@ -302,8 +302,14 @@ app.get('/inventory_admin.html', checkAuth, (req, res) => {
   res.sendFile(path.join(__dirname, 'inventory_admin.html'));
 });
 
+// Redirect root URL / to inventory_search.html
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'inventory_search.html'));
+});
+
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Server running at http://0.0.0.0:${PORT}`);
 });
+
 
 
